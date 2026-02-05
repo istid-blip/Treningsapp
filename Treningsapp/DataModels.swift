@@ -1,28 +1,18 @@
-//
-//  DataModels.swift
-//  Treningsapp
-//
-//  Created by Frode Halrynjo on 04/02/2026.
-//
-
 import Foundation
 import SwiftData
 
-// --- ENDRING: Ny Enum for Kategori ---
-// Dette sikrer at vi bruker faste verdier overalt i stedet for løse tekster.
 enum ExerciseCategory: String, Codable, CaseIterable {
     case strength = "Styrke"
     case cardio = "Kondisjon"
-    case mobility = "Mobilitet"
-    case core = "Core"
-    case pause = "Pause" // Praktisk å ha pause som en kategori også
+    case combined = "Kombinert"
+    case other = "Annet"
 }
 
 enum SegmentType: String, Codable, CaseIterable {
-    case duration = "Tid"           // Jobb på tid
-    case reps = "Repetisjoner"      // Jobb på antall
-    case stopwatch = "Stoppeklokke" // Jobb på tid (oppover)
-    case pause = "Pause"            // Eget segment for hvile
+    case duration = "Tid"
+    case reps = "Repetisjoner"
+    case stopwatch = "Stoppeklokke"
+    case pause = "Pause"
 }
 
 @Model
@@ -43,39 +33,37 @@ final class CircuitExercise {
     var durationSeconds: Int
     var targetReps: Int
     
-    // --- ENDRING: Kategori-logikk ---
-    // Vi lagrer rawValue (strengen) i basen, men jobber med enumen i koden.
     var categoryRawValue: String = ExerciseCategory.strength.rawValue
-    
     var category: ExerciseCategory {
         get { ExerciseCategory(rawValue: categoryRawValue) ?? .strength }
         set { categoryRawValue = newValue.rawValue }
     }
     
     var note: String
-    
-    // Legacy-felt (kan fjernes senere hvis du wiper databasen, men trygt å la stå)
     var restSeconds: Int = 0
-
     var typeRawValue: String = SegmentType.duration.rawValue
-    
     var type: SegmentType {
         get { SegmentType(rawValue: typeRawValue) ?? .duration }
         set { typeRawValue = newValue.rawValue }
     }
     
+    // --- ENDRING: Nytt felt for å huske rekkefølgen ---
+    var sortIndex: Int = 0
+    
     init(name: String,
          durationSeconds: Int = 45,
          targetReps: Int = 10,
-         category: ExerciseCategory = .strength, // Tar nå inn Enum
+         category: ExerciseCategory = .strength,
          note: String = "",
-         type: SegmentType = .duration) {
+         type: SegmentType = .duration,
+         sortIndex: Int = 0) { // Tar inn sortIndex
         
         self.name = name
         self.durationSeconds = durationSeconds
         self.targetReps = targetReps
-        self.categoryRawValue = category.rawValue // Lagrer streng-verdien
+        self.categoryRawValue = category.rawValue
         self.note = note
         self.typeRawValue = type.rawValue
+        self.sortIndex = sortIndex // Lagrer rekkefølgen
     }
 }
