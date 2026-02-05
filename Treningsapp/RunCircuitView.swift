@@ -3,23 +3,29 @@ import Combine
 
 enum CircuitState {
     case idle           // Før start
-    case getReady       // Nedtelling FØR et aktivt segment (ikke før pause)
-    case executing      // Utfører segmentet (enten det er jobb eller pause)
+    case getReady       // Nedtelling FØR et aktivt segment
+    case executing      // Utfører segmentet
     case completed      // Ferdig
 }
 
 struct RunCircuitView: View {
+    @Environment(\.dismiss) var dismiss // --- ENDRING: For å kunne lukke viewet ---
     let routine: CircuitRoutine
     
     @State private var currentState: CircuitState = .idle
     @State private var currentSegmentIndex = 0
     
-    // Tellere
+    // UI-Tellere
     @State private var timeRemaining = 0
     @State private var elapsedTime = 0
     
     @State private var timerActive = false
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    // --- ENDRING: Bakgrunnssikker tidtaking ---
+    // Vi lagrer absolutte datoer for når ting skal være ferdig.
+    @State private var countdownTargetDate: Date? // For nedtelling
+    @State private var stopwatchStartDate: Date?  // For stoppeklokke
     
     var body: some View {
         ZStack {
@@ -104,7 +110,8 @@ struct RunCircuitView: View {
             // Knapperad
             HStack(spacing: 40) {
                 if currentState != .idle {
-                    Button(action: { timerActive.toggle() }) {
+                    // --- ENDRING: Bruker toggleTimer() funksjon i stedet for direkte .toggle() ---
+                    Button(action: { toggleTimer() }) {
                         Image(systemName: timerActive ? "pause.circle.fill" : "play.circle.fill")
                             .resizable()
                             .frame(width: 70, height: 70)
@@ -112,9 +119,6 @@ struct RunCircuitView: View {
                     }
                 }
                 
-                // Ferdig-knapp / Hopp over
-                // Vises hvis vi er idle, eller hvis vi må trykke manuelt (reps/stopwatch),
-                // eller hvis brukeren vil hoppe over en pause/timer.
                 Button(action: {
                     if currentState == .idle {
                         startNextSegment()
@@ -144,6 +148,18 @@ struct RunCircuitView: View {
                 .font(.largeTitle)
                 .bold()
                 .foregroundStyle(.white)
+            
+            // --- ENDRING: Avslutt-knapp ---
+            Button(action: { dismiss() }) {
+                Text("Avslutt økt")
+                    .font(.headline)
+                    .padding()
+                    .frame(width: 200)
+                    .background(Color.white)
+                    .foregroundColor(.blue)
+                    .cornerRadius(12)
+            }
+            .padding(.top, 30)
         }
     }
     
@@ -161,7 +177,6 @@ struct RunCircuitView: View {
         if currentState == .idle { return .gray }
         if currentState == .getReady { return .yellow }
         
-        // Farge basert på segment-type
         if currentSegment.type == .pause { return .orange }
         return .green
     }
@@ -178,57 +193,94 @@ struct RunCircuitView: View {
         return String(format: "%d:%02d", min, sec)
     }
     
-    // Kalles hvert sekund
+    // --- ENDRING: Ny logikk for timer PAUSE/START ---
+    func toggleTimer() {
+        timerActive.toggle()
+        
+        if timerActive {
+            // Vi starter opp igjen: Beregn nye måltidspunkter basert på nåtid
+            if currentState == .getReady || currentSegment.type == .duration || currentSegment.type == .pause {
+                // Nedtelling: Målet er NÅ + det som gjensto
+                countdownTargetDate = Date().addingTimeInterval(Double(timeRemaining))
+            } else if currentSegment.type == .stopwatch {
+                // Stoppeklokke: Startet opprinnelig for (elapsedTime) siden
+                stopwatchStartDate = Date().addingTimeInterval(-Double(elapsedTime))
+            }
+        } else {
+            // Vi pauser: Datoene nulles ut, men timeRemaining/elapsedTime bevares (State)
+            countdownTargetDate = nil
+            stopwatchStartDate = nil
+        }
+    }
+
+    // --- ENDRING: Robust tidtaking ---
     func updateTimer() {
         if currentState == .getReady {
-            if timeRemaining > 0 { timeRemaining -= 1 }
-            else { enterSegment() }
+            // Sjekk mot klokka i stedet for å trekke fra 1
+            guard let target = countdownTargetDate else { return }
+            let diff = target.timeIntervalSinceNow
+            timeRemaining = max(0, Int(ceil(diff)))
+            
+            if timeRemaining == 0 { enterSegment() }
         }
         else if currentState == .executing {
             switch currentSegment.type {
             case .duration, .pause:
-                if timeRemaining > 0 { timeRemaining -= 1 }
-                else { finishCurrentSegment() }
+                guard let target = countdownTargetDate else { return }
+                let diff = target.timeIntervalSinceNow
+                timeRemaining = max(0, Int(ceil(diff)))
+                
+                if timeRemaining == 0 { finishCurrentSegment() }
+                
             case .stopwatch:
-                elapsedTime += 1
+                guard let start = stopwatchStartDate else { return }
+                let diff = Date().timeIntervalSince(start)
+                elapsedTime = Int(diff)
+                
             case .reps:
                 break // Venter på manuelt trykk
             }
         }
     }
     
-    // Starter logikken for neste segment
     func startNextSegment() {
-        // Skal vi ha "Get Ready" før dette segmentet?
-        // Ja, hvis det er en aktiv øvelse. Nei, hvis det er en pause.
         let isActiveExercise = currentSegment.type != .pause
         
         if isActiveExercise {
             currentState = .getReady
             timeRemaining = 5
             timerActive = true
+            // Sett mål-tid for Get Ready
+            countdownTargetDate = Date().addingTimeInterval(5)
         } else {
-            // Hvis det er pause, start pausen direkte
             enterSegment()
         }
     }
     
-    // Går fra GetReady -> Executing
     func enterSegment() {
         currentState = .executing
         timerActive = true
         elapsedTime = 0
         
-        // Sett opp tid basert på type
         if currentSegment.type == .duration || currentSegment.type == .pause {
             timeRemaining = currentSegment.durationSeconds
+            // Sett mål-tid for nedtelling
+            countdownTargetDate = Date().addingTimeInterval(Double(timeRemaining))
+        } else if currentSegment.type == .stopwatch {
+            timeRemaining = 0
+            // Sett start-tid for stoppeklokke
+            stopwatchStartDate = Date()
         } else {
+            // Reps: Trenger ingen timer-dato
             timeRemaining = 0
         }
     }
     
-    // Når segmentet er ferdig
     func finishCurrentSegment() {
+        // Nullstill timere
+        countdownTargetDate = nil
+        stopwatchStartDate = nil
+        
         if currentSegmentIndex < routine.segments.count - 1 {
             currentSegmentIndex += 1
             startNextSegment()

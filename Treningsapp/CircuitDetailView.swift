@@ -8,8 +8,6 @@ struct CircuitDetailView: View {
     @State private var showAddSegment = false
     @State private var draggingSegment: CircuitExercise?
     
-    // ENDRING 1: Adaptive kolonner for iPad/iPhone støtte
-    // Dette fyller rekken bortover så langt det er plass
     let columns = [GridItem(.adaptive(minimum: 150), spacing: 24)]
 
     var body: some View {
@@ -24,7 +22,7 @@ struct CircuitDetailView: View {
                         .submitLabel(.done)
                         .onChange(of: routine.name) { ensureSaved() }
                     
-                    LazyVGrid(columns: columns, spacing: 24) { // Litt mer luft
+                    LazyVGrid(columns: columns, spacing: 24) {
                         
                         // 1. SEGMENTENE
                         ForEach(Array(routine.segments.enumerated()), id: \.element.id) { index, segment in
@@ -38,14 +36,14 @@ struct CircuitDetailView: View {
                             )
                         }
                         
-                        // 2. LEGG TIL KNAPP (Sist i rekken)
+                        // 2. LEGG TIL KNAPP
                         Button(action: { showAddSegment = true }) {
                             TreningsKort(
                                 tittel: "Legg til",
                                 ikon: "plus",
                                 bakgrunnsfarge: Color(.systemGray6),
                                 tekstFarge: .blue,
-                                visPil: false // Ingen pil ut fra denne
+                                visPil: false
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
@@ -109,8 +107,6 @@ struct DraggableSegmentView: View {
                 ikon: iconForSegment(segment),
                 bakgrunnsfarge: colorForSegment(segment),
                 tekstFarge: segment.type == .pause ? .primary : .white,
-                
-                // ENDRING 2: Vis pil på alle, unntatt det aller siste segmentet
                 visPil: index < totalCount - 1
             )
         }
@@ -132,8 +128,6 @@ struct DraggableSegmentView: View {
     }
 }
 
-// (DropDelegate, segmentDescription, colorForSegment, iconForSegment er uendret fra forrige svar)
-// Du kan beholde dem som de er.
 // --- DRAG & DROP DELEGATE ---
 struct SegmentDropDelegate: DropDelegate {
     let item: CircuitExercise
@@ -173,24 +167,27 @@ func segmentDescription(for segment: CircuitExercise) -> String {
     }
 }
 
+// --- ENDRING: Bruker nå switch på Enum ---
 func colorForSegment(_ segment: CircuitExercise) -> Color {
     if segment.type == .pause { return Color(.systemGray5) }
+    
     switch segment.category {
-    case "Styrke": return .blue
-    case "Kondisjon": return .red
-    case "Mobilitet": return .green
-    case "Core": return .orange
-    default: return .gray
+    case .strength: return .blue
+    case .cardio: return .red
+    case .mobility: return .green
+    case .core: return .orange
+    case .pause: return .gray // Fallback, fanges gjerne av if-sjekken over
     }
 }
 
 func iconForSegment(_ segment: CircuitExercise) -> String? {
     if segment.type == .pause { return "cup.and.saucer.fill" }
+    
     switch segment.category {
-    case "Styrke": return "dumbbell.fill"
-    case "Kondisjon": return "figure.run"
-    case "Mobilitet": return "figure.flexibility"
-    case "Core": return "figure.core.training"
+    case .strength: return "dumbbell.fill"
+    case .cardio: return "figure.run"
+    case .mobility: return "figure.flexibility"
+    case .core: return "figure.core.training"
     default: return nil
     }
 }

@@ -12,7 +12,10 @@ struct AddSegmentView: View {
     
     // Felt for Øvelse
     @State private var name = ""
-    @State private var category = "Styrke"
+    
+    // --- ENDRING: Bruker nå Enum som standardverdi ---
+    @State private var selectedCategory: ExerciseCategory = .strength
+    
     @State private var note = ""
     @State private var selectedType: SegmentType = .duration
     @State private var duration = 45
@@ -20,8 +23,6 @@ struct AddSegmentView: View {
     
     // Felt for Pause
     @State private var pauseDuration = 30
-    
-    let categories = ["Styrke", "Kondisjon", "Mobilitet", "Core"]
     
     var body: some View {
         NavigationStack {
@@ -45,16 +46,18 @@ struct AddSegmentView: View {
                     // --- UI FOR ØVELSE ---
                     Section(header: Text("Info")) {
                         TextField("Navn på øvelse", text: $name)
-                        Picker("Kategori", selection: $category) {
-                            ForEach(categories, id: \.self) { cat in
-                                Text(cat).tag(cat)
+                        
+                        // --- ENDRING: Picker bruker nå Enum ---
+                        Picker("Kategori", selection: $selectedCategory) {
+                            // Filterer bort 'pause' fra menyen her, siden det er et eget valg øverst
+                            ForEach(ExerciseCategory.allCases.filter { $0 != .pause }, id: \.self) { cat in
+                                Text(cat.rawValue).tag(cat)
                             }
                         }
                     }
                     
                     Section(header: Text("Type og Mål")) {
                         Picker("Type", selection: $selectedType) {
-                            // Vi filtrerer bort 'pause' fra denne listen, siden det velges på toppen
                             Text("Tid (Nedtelling)").tag(SegmentType.duration)
                             Text("Repetisjoner").tag(SegmentType.reps)
                             Text("Stoppeklokke").tag(SegmentType.stopwatch)
@@ -81,7 +84,6 @@ struct AddSegmentView: View {
                     Button("Legg til") {
                         saveSegment()
                     }
-                    // Deaktiver knapp kun hvis det er øvelse og navn mangler
                     .disabled(!isPauseBlock && name.isEmpty)
                 }
             }
@@ -94,20 +96,18 @@ struct AddSegmentView: View {
         let newSegment: CircuitExercise
         
         if isPauseBlock {
-            // Lag et PAUSE-segment
             newSegment = CircuitExercise(
                 name: "Pause",
                 durationSeconds: pauseDuration,
-                category: "Pause", // Egen kategori for pause
+                category: .pause, // Bruker .pause fra Enum
                 type: .pause
             )
         } else {
-            // Lag et ØVELSE-segment
             newSegment = CircuitExercise(
                 name: name,
                 durationSeconds: duration,
                 targetReps: targetReps,
-                category: category,
+                category: selectedCategory, // Bruker valgt Enum
                 note: note,
                 type: selectedType
             )
