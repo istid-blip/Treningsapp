@@ -223,30 +223,32 @@ struct CircuitDetailView: View {
     // --- FUNKSJONER ---
     
     // NY FUNKSJON: KOPIERER TIL HISTORIKK
-    private func logWorkout() {
-        // 1. Lag en ny logg-oppføring
-        let log = WorkoutLog(routineName: routine.name, date: Date())
-        
-        // 2. Kopier hver øvelse (Snapshot)
-        for segment in uiSegments {
-            // Vi bruker hjelpefunksjonen vår til å lage en fin tekst av resultatet
-            let resultText = segmentDescription(for: segment)
+    // NY FUNKSJON: KOPIERER TIL HISTORIKK MED RÅDATA
+        private func logWorkout() {
+            // 1. Lag en ny logg-oppføring
+            let log = WorkoutLog(routineName: routine.name, date: Date())
             
-            let loggedExercise = LoggedExercise(
-                name: segment.name,
-                categoryRawValue: segment.category.rawValue,
-                resultText: resultText
-            )
-            log.exercises.append(loggedExercise)
+            // 2. Kopier hver øvelse (Snapshot)
+            for segment in uiSegments {
+                let loggedExercise = LoggedExercise(
+                    name: segment.name,
+                    categoryRawValue: segment.category.rawValue,
+                    duration: segment.durationSeconds,
+                    reps: segment.targetReps,
+                    weight: segment.weight,
+                    distance: segment.distance,
+                    note: segment.note
+                )
+                log.exercises.append(loggedExercise)
+            }
+            
+            // 3. Lagre
+            modelContext.insert(log)
+            try? modelContext.save()
+            
+            // 4. Vis bekreftelse
+            showLogConfirmation = true
         }
-        
-        // 3. Lagre
-        modelContext.insert(log)
-        try? modelContext.save()
-        
-        // 4. Vis bekreftelse
-        showLogConfirmation = true
-    }
     
     private func closeAllPanels() {
         withAnimation(.snappy) {

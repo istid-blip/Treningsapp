@@ -124,34 +124,50 @@ struct ContentView: View {
 }
 
 // --- KOMPONENT FOR HISTORIKK-RAD ---
+// --- KOMPONENT FOR HISTORIKK-RAD ---
 struct HistoryRow: View {
     let log: WorkoutLog
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(log.routineName)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+        NavigationLink(destination: LogDetailView(log: log)) { // <-- Link til den nye visningen
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(log.routineName)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        
+                        // VIS "REDIGERT" MERKE
+                        if log.wasEdited {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    
+                    Text(log.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 
-                Text(log.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            // Viser antall øvelser gjennomført
-            Text("\(log.exercises.count) øvelser")
+                Spacer()
+                
+                // Viser antall øvelser
+                HStack {
+                    Text("\(log.exercises.count) øvelser")
+                    Image(systemName: "chevron.right") // Indikerer at den kan åpnes
+                        .font(.caption)
+                        .foregroundStyle(.gray)
+                }
                 .font(.subheadline)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
+            }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .buttonStyle(PlainButtonStyle()) // Fjerner blå link-farge
     }
 }

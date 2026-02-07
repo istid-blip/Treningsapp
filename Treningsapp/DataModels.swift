@@ -65,10 +65,14 @@ final class CircuitExercise {
 
 // --- NYE MODELLER FOR HISTORIKK ---
 
+// --- NYE MODELLER FOR HISTORIKK ---
+
 @Model
 final class WorkoutLog {
     var routineName: String
     var date: Date
+    var wasEdited: Bool = false // Nytt felt: Viser om økten er endret i ettertid
+    
     @Relationship(deleteRule: .cascade) var exercises: [LoggedExercise] = []
     
     init(routineName: String, date: Date = Date()) {
@@ -81,15 +85,22 @@ final class WorkoutLog {
 final class LoggedExercise {
     var name: String
     var categoryRawValue: String
-    var resultText: String // F.eks "10 reps @ 50kg" eller "45 sek"
     
-    // Vi lagrer ferdig formatert tekst for enkelhets skyld i historikken,
-    // men du kan også lagre rådata (reps, kg) om du vil lage grafer senere.
+    // Vi lagrer NÅ rådataene også, slik at vi kan redigere dem
+    var durationSeconds: Int
+    var targetReps: Int
+    var weight: Double
+    var distance: Double
+    var note: String
     
-    init(name: String, categoryRawValue: String, resultText: String) {
+    init(name: String, categoryRawValue: String, duration: Int, reps: Int, weight: Double, distance: Double, note: String) {
         self.name = name
         self.categoryRawValue = categoryRawValue
-        self.resultText = resultText
+        self.durationSeconds = duration
+        self.targetReps = reps
+        self.weight = weight
+        self.distance = distance
+        self.note = note
     }
     
     var category: ExerciseCategory {
