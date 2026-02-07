@@ -17,6 +17,12 @@ struct AppTheme {
     let textColor: Color
     let backgroundColor: Color // Hvis du vil ha tema på bakgrunnen også
     
+    let drawerBackgroundColor: Color
+        let drawerHeaderColor: Color // Fargen på "tittellinjen" i skuffen
+        let drawerCornerRadius: CGFloat
+        let drawerShadowColor: Color
+    
+    
     // Funksjon for å hente farge basert på kategori
     func color(for category: ExerciseCategory) -> Color {
         switch name {
@@ -48,7 +54,11 @@ extension AppTheme {
         arrowIcon: "arrow.right",
         arrowColor: .gray.opacity(0.6),
         textColor: .white,
-        backgroundColor: .white
+        backgroundColor: .white,
+        drawerBackgroundColor: Color(.systemGroupedBackground),
+        drawerHeaderColor: Color(.systemGray6),
+        drawerCornerRadius: 24,
+        drawerShadowColor: .black.opacity(0.2)
     )
     
     static let minimal = AppTheme(
@@ -56,6 +66,11 @@ extension AppTheme {
         arrowIcon: "chevron.right", // En tynnere pil
         arrowColor: .black,
         textColor: .black,
-        backgroundColor: Color(.systemGray6)
+        backgroundColor: Color(.systemGray6),
+        
+        drawerBackgroundColor: Color(.systemGray6),
+        drawerHeaderColor: Color(.systemGray5),
+        drawerCornerRadius: 16, // Litt skarpere hjørner
+        drawerShadowColor: .white.opacity(0.1)
     )
 }
