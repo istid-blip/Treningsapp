@@ -4,7 +4,6 @@ import SwiftData
 struct AddSegmentView: View {
     @Environment(\.modelContext) var modelContext
     
-    // Vi trenger ikke lenger routine, da vi endrer rett på segmentet
     var routine: CircuitRoutine
     var segmentToEdit: CircuitExercise?
     
@@ -12,17 +11,17 @@ struct AddSegmentView: View {
     var onRequestPicker: (String, Binding<Int>, ClosedRange<Int>, Int) -> Void
     var onTyping: () -> Void
     
-    // UI-tilstander
     @State private var name = ""
     @State private var selectedCategory: ExerciseCategory = .strength
     @State private var note = ""
-    @State private var selectedType: SegmentType = .duration
+    
     @State private var duration = 45
     @State private var targetReps = 10
+    @State private var weight: Double = 0.0
+    @State private var distance: Double = 0.0
     
     @State private var showDeleteConfirmation = false
     
-    // Fokus-kontroll
     @FocusState private var isNameFocused: Bool
     @FocusState private var isNoteFocused: Bool
     
@@ -35,127 +34,134 @@ struct AddSegmentView: View {
                     // 1. NAVN
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Øvelsesnavn")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(.secondary)
                         
-                        TextField("F.eks. Knebøy", text: $name)
+                        TextField("F.eks. Pause eller Knebøy", text: $name)
                             .font(.title3)
                             .padding()
                             .background(Color(.systemGray6))
                             .cornerRadius(12)
                             .focused($isNameFocused)
                             .submitLabel(.done)
-                            .onChange(of: name) { _, _ in updateSegment() } // FIKSET
-                            .onChange(of: isNameFocused) { _, focused in    // FIKSET
+                            .onChange(of: name) { _, _ in updateSegment() }
+                            .onChange(of: isNameFocused) { _, focused in
                                 if focused { onTyping() }
                             }
                     }
                     
-                    // 2. KATEGORI
+                    // 2. KATEGORI (ENDRET: Ingen scrolling)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Kategori")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(.secondary)
                         
+                        // HER ER ENDRINGEN: Fjernet ScrollView, lagt til maxWidth på knappene
                         HStack(spacing: 8) {
                             ForEach(ExerciseCategory.allCases, id: \.self) { category in
                                 Button(action: {
                                     withAnimation(.snappy) {
                                         selectedCategory = category
+                                        applySmartDefaults()
                                         updateSegment()
                                     }
                                 }) {
                                     Text(category.rawValue)
                                         .font(.caption)
                                         .fontWeight(.semibold)
-                                        .frame(maxWidth: .infinity)
+                                        .lineLimit(1) // Sikrer at tekst holder seg på én linje
+                                        .minimumScaleFactor(0.8) // Krymper teksten litt hvis det blir trangt
                                         .padding(.vertical, 12)
+                                        .frame(maxWidth: .infinity) // VIKTIG: Deler plassen likt
                                         .background(
                                             selectedCategory == category
                                             ? AppTheme.standard.color(for: category)
                                             : Color(.systemGray6)
                                         )
-                                        .foregroundStyle(selectedCategory == category ? .white : .primary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .contentShape(Rectangle())
+                                        .foregroundStyle(selectedCategory == category ? Color.white : Color.primary)
+                                        .clipShape(Capsule())
                                 }
                                 .buttonStyle(ScaleButtonStyle())
                             }
                         }
                     }
                     
-                    // 3. TYPE
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Type")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    // 3. SMARTE INNDATAFELT
+                    VStack(spacing: 16) {
                         
-                        Picker("Type", selection: $selectedType) {
-                            ForEach(SegmentType.allCases, id: \.self) { type in
-                                Text(type.rawValue).tag(type)
-                            }
+                        if showReps {
+                            SmartInputRow(
+                                title: "Antall Reps",
+                                valueString: "\(targetReps)",
+                                icon: "arrow.counterclockwise",
+                                action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
+                            )
                         }
-                        .pickerStyle(.segmented)
-                        .onChange(of: selectedType) { _, _ in updateSegment() } // FIKSET
+                        
+                        if showWeight {
+                            SmartInputRow(
+                                title: "Belastning (kg)",
+                                valueString: weight == 0 ? "-" : String(format: "%.0f kg", weight),
+                                icon: "scalemass",
+                                action: {
+                                    let weightBinding = Binding<Int>(
+                                        get: { Int(weight) },
+                                        set: { weight = Double($0); updateSegment() }
+                                    )
+                                    onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+                                }
+                            )
+                        }
+                        
+                        if showTime {
+                            SmartInputRow(
+                                title: "Varighet",
+                                valueString: "\(duration) sek",
+                                icon: "clock",
+                                action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
+                            )
+                        }
+                        
+                        if showDistance {
+                            SmartInputRow(
+                                title: "Distanse (meter)",
+                                valueString: distance == 0 ? "-" : String(format: "%.0f m", distance),
+                                icon: "figure.run",
+                                action: {
+                                    let distBinding = Binding<Int>(
+                                        get: { Int(distance) },
+                                        set: { distance = Double($0); updateSegment() }
+                                    )
+                                    onRequestPicker("Meter", distBinding, 0...10000, 50)
+                                }
+                            )
+                        }
                     }
                     
-                    // 4. VERDI
+                    // 4. NOTATER
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(valueTitle())
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("Notater")
+                            .font(.caption).foregroundStyle(.secondary)
                         
-                        Button(action: {
-                            if selectedType == .duration || selectedType == .pause {
-                                onRequestPicker(valueTitle(), $duration, 5...600, 5)
-                            } else {
-                                onRequestPicker(valueTitle(), $targetReps, 1...100, 1)
-                            }
-                        }) {
-                            HStack {
-                                Text(valueString())
-                                    .font(.title2)
-                                    .bold()
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                        }
-                    }
-                    .onChange(of: duration) { _, _ in updateSegment() }   // FIKSET
-                    .onChange(of: targetReps) { _, _ in updateSegment() } // FIKSET
-                    
-                    // 5. NOTATER
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Notater (valgfritt)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        TextField("Teknikk, vekt, etc...", text: $note)
+                        TextField("Valgfritt...", text: $note)
                             .padding()
                             .background(Color(.systemGray6))
                             .cornerRadius(12)
                             .focused($isNoteFocused)
                             .submitLabel(.done)
-                            .onChange(of: note) { _, _ in updateSegment() } // FIKSET
-                            .onChange(of: isNoteFocused) { _, focused in    // FIKSET
+                            .onChange(of: note) { _, _ in updateSegment() }
+                            .onChange(of: isNoteFocused) { _, focused in
                                 if focused { onTyping() }
                             }
                     }
                     
                     Spacer(minLength: 20)
                     
-                    // SLETT KNAPP
+                    // SLETT
                     Button(action: { showDeleteConfirmation = true }) {
                         HStack {
                             Image(systemName: "trash")
                             Text("Slett del")
                         }
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.red)
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(Color.red.opacity(0.1))
@@ -172,11 +178,15 @@ struct AddSegmentView: View {
                 name = segment.name
                 selectedCategory = segment.category
                 note = segment.note
-                selectedType = segment.type
                 duration = segment.durationSeconds
                 targetReps = segment.targetReps
+                weight = segment.weight
+                distance = segment.distance
             }
         }
+        .onChange(of: duration) { _, _ in updateSegment() }
+        .onChange(of: targetReps) { _, _ in updateSegment() }
+        
         .alert("Slett?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) { }
             Button("Slett", role: .destructive) { deleteSegment() }
@@ -185,17 +195,29 @@ struct AddSegmentView: View {
         }
     }
     
-    // --- LOGIKK ---
+    var showReps: Bool { selectedCategory == .strength || selectedCategory == .combined }
+    var showWeight: Bool { selectedCategory == .strength || selectedCategory == .combined }
+    var showTime: Bool { selectedCategory == .cardio || selectedCategory == .other || selectedCategory == .combined }
+    var showDistance: Bool { selectedCategory == .cardio || selectedCategory == .combined }
+    
+    func applySmartDefaults() {
+        switch selectedCategory {
+        case .other:
+            if name.isEmpty { name = "Pause" }
+        default:
+            if name == "Pause" { name = "" }
+        }
+    }
     
     func updateSegment() {
         guard let segment = segmentToEdit else { return }
-        
         segment.name = name
         segment.category = selectedCategory
         segment.note = note
-        segment.type = selectedType
         segment.durationSeconds = duration
         segment.targetReps = targetReps
+        segment.weight = weight
+        segment.distance = distance
     }
     
     func deleteSegment() {
@@ -206,23 +228,32 @@ struct AddSegmentView: View {
         modelContext.delete(segment)
         onDismiss()
     }
+}
+
+struct SmartInputRow: View {
+    let title: String
+    let valueString: String
+    let icon: String
+    let action: () -> Void
     
-    // --- UI HJELPERE ---
-    func valueTitle() -> String {
-        switch selectedType {
-        case .duration: return "Varighet"
-        case .reps: return "Antall"
-        case .stopwatch: return "Mål (reps)"
-        case .pause: return "Pause varighet"
-        }
-    }
-    
-    func valueString() -> String {
-        switch selectedType {
-        case .duration: return "\(duration) sek"
-        case .reps: return "\(targetReps) reps"
-        case .stopwatch: return "\(targetReps) reps"
-        case .pause: return "\(duration) sek"
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                ZStack {
+                    Circle().fill(Color.blue.opacity(0.1)).frame(width: 32, height: 32)
+                    Image(systemName: icon).font(.caption).foregroundStyle(Color.blue)
+                }
+                
+                Text(title).foregroundStyle(Color.primary)
+                Spacer()
+                HStack(spacing: 4) {
+                    Text(valueString).font(.title3).bold().foregroundStyle(Color.primary)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8).background(Color(.systemGray6)).cornerRadius(8)
+            }
+            .padding(12).background(Color.white).cornerRadius(12).shadow(color: .black.opacity(0.03), radius: 5)
         }
     }
 }
+

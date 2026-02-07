@@ -2,10 +2,9 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
-// 1. Definisjon av tilstander for skuffen
+// ... (DrawerState og PickerState er uendret) ...
 enum DrawerState: Identifiable {
     case editSegment(CircuitExercise)
-    
     var id: String {
         switch self {
         case .editSegment(let segment): return "edit-\(segment.id)"
@@ -13,7 +12,6 @@ enum DrawerState: Identifiable {
     }
 }
 
-// 2. Definisjon av tilstand for rullehjulet
 struct PickerState: Identifiable {
     let id = UUID()
     let title: String
@@ -25,19 +23,18 @@ struct PickerState: Identifiable {
 struct CircuitDetailView: View {
     @Bindable var routine: CircuitRoutine
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) var dismiss // For å kunne lage vår egen tilbake-knapp
+    @Environment(\.dismiss) var dismiss
     
     // UI States
     @State private var draggingSegment: CircuitExercise?
-    @State private var activeDrawer: DrawerState? = nil // Topp-panelet
-    @State private var activePicker: PickerState? = nil // Bunn-panelet
+    @State private var activeDrawer: DrawerState? = nil
+    @State private var activePicker: PickerState? = nil
     
     @State private var uiSegments: [CircuitExercise] = []
+    @State private var showLogConfirmation = false // Ny: Bekreftelse
     
     let columns = [GridItem(.adaptive(minimum: 110), spacing: 16)]
     let currentTheme: AppTheme = .standard
-    
-    // Konstanter for høyder
     let pickerHeight: CGFloat = 320
     
     var body: some View {
@@ -48,39 +45,31 @@ struct CircuitDetailView: View {
                 ZStack(alignment: .bottom) {
                     VStack(spacing: 0) {
                         
-                        // 1. EGEN HEADER (Erstatter standard Navigation Bar)
+                        // 1. EGEN HEADER (Uendret)
                         HStack {
                             Button(action: { dismiss() }) {
                                 HStack(spacing: 5) {
-                                    Image(systemName: "chevron.left")
-                                        .bold()
+                                    Image(systemName: "chevron.left").bold()
                                     Text("Tilbake")
                                 }
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Color.blue)
                             }
-                            
                             Spacer()
-                            
-                            // Tittel (Flyttet hit)
                             TextField("Navn på økt", text: $routine.name)
                                 .font(.headline)
                                 .multilineTextAlignment(.center)
                                 .submitLabel(.done)
-                            
                             Spacer()
-                            
-                            // "Usynlig" knapp for balanse i layout
                             Color.clear.frame(width: 60, height: 44)
                         }
                         .padding(.horizontal)
-                        .frame(height: 50) // Standard høyde for header
-                        .background(Color(.systemBackground)) // Bakgrunnsfarge
-                        .zIndex(1) // Ligger over innholdet som scroller
+                        .frame(height: 50)
+                        .background(Color(.systemBackground))
+                        .zIndex(1)
                         
-                        // 2. HOVEDINNHOLD (ScrollView)
+                        // 2. HOVEDINNHOLD
                         ScrollView {
                             VStack(alignment: .leading, spacing: 20) {
-                                
                                 LazyVGrid(columns: columns, spacing: 24) {
                                     ForEach(Array(uiSegments.enumerated()), id: \.element.id) { index, segment in
                                         DraggableSegmentView(
@@ -102,26 +91,21 @@ struct CircuitDetailView: View {
                                     // LEGG TIL KNAPP
                                     HStack(spacing: 8) {
                                         Button(action: {
-                                            // 1. Regn ut neste nummer i rekken
                                             let nextNumber = routine.segments.count + 1
                                             let autoName = "Segment \(nextNumber)"
                                             
-                                            // 2. Opprett nytt segment med automatisk navn
                                             let newSegment = CircuitExercise(
                                                 name: autoName,
                                                 durationSeconds: 45,
                                                 targetReps: 10,
                                                 category: .strength,
                                                 note: "",
-                                                type: .duration,
                                                 sortIndex: routine.segments.count
                                             )
                                             
-                                            // 3. Lagre til database og listen
                                             modelContext.insert(newSegment)
                                             routine.segments.append(newSegment)
                                             
-                                            // 4. Åpne redigeringsskuffen direkte
                                             withAnimation(.snappy) {
                                                 activeDrawer = .editSegment(newSegment)
                                             }
@@ -141,10 +125,21 @@ struct CircuitDetailView: View {
                         }
                     }
                     
+                    // --- NY LOGG KNAPP (Erstatter Start Trening) ---
                     if !routine.segments.isEmpty {
-                        NavigationLink(destination: RunCircuitView(routine: routine)) {
-                            Text("START TRENING")
-                                .font(.headline).foregroundStyle(.white).frame(maxWidth: .infinity).padding().background(Color.blue).cornerRadius(12).padding().shadow(radius: 5)
+                        Button(action: logWorkout) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("LOGG ØKT")
+                            }
+                            .font(.headline)
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green) // Grønn for fullført/logg
+                            .cornerRadius(12)
+                            .padding()
+                            .shadow(radius: 5)
                         }
                     }
                 }
@@ -153,17 +148,14 @@ struct CircuitDetailView: View {
                 // --- DIMMING ---
                 if activeDrawer != nil || activePicker != nil {
                     Color.black.opacity(0.4)
-                        .ignoresSafeArea() // Dekker ALT, inkludert header
+                        .ignoresSafeArea()
                         .onTapGesture { closeAllPanels() }
                         .transition(.opacity)
                         .zIndex(10)
                 }
                 
-                // --- HOVEDSKUFF (TOPP) ---
+                // --- HOVEDSKUFF ---
                 if let drawerState = activeDrawer {
-                    // Beregner høyde:
-                    // Hvis picker (hjul) er oppe: Skjermhøyde - hjulhøyde.
-                    // Hvis ikke: Hele skjermen (+60 for å dekke helt opp forbi dynamic island/status bar).
                     let availableHeight = activePicker != nil
                         ? (geometry.size.height - pickerHeight)
                         : (geometry.size.height + 60)
@@ -188,17 +180,16 @@ struct CircuitDetailView: View {
                             )
                         }
                     }
-                    .zIndex(11) // Ligger over dimming (10) og header (1)
-                    .ignoresSafeArea(.all, edges: .top) // Lar den gå helt til toppen
+                    .zIndex(11)
+                    .ignoresSafeArea(.all, edges: .top)
                 }
                 
-                // --- PICKER SKUFF (BUNN) ---
+                // --- PICKER SKUFF ---
                 if let pickerState = activePicker {
                     DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
                         VStack(spacing: 15) {
                             Text(pickerState.title)
-                                .font(.headline)
-                                .padding(.top, 10)
+                                .font(.headline).padding(.top, 10)
                             
                             Picker("", selection: pickerState.binding) {
                                 ForEach(Array(stride(from: pickerState.range.lowerBound, through: pickerState.range.upperBound, by: pickerState.step)), id: \.self) { value in
@@ -212,19 +203,50 @@ struct CircuitDetailView: View {
                                 withAnimation(.snappy) { activePicker = nil }
                             }) {
                                 Text("Ferdig")
-                                    .font(.headline).frame(maxWidth: .infinity).padding().background(Color.blue).foregroundStyle(.white).cornerRadius(12)
+                                    .font(.headline).frame(maxWidth: .infinity).padding().background(Color.blue).foregroundStyle(Color.white).cornerRadius(12)
                             }
                         }
                     }
                     .zIndex(12)
                 }
             }
-        } // End GeometryReader
-        .toolbar(.hidden, for: .navigationBar) // SKJULER DEN ORIGINALE HEADEREN
+        }
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear { refreshUILoad() }
+        .alert("Økt logget!", isPresented: $showLogConfirmation) {
+            Button("OK", role: .cancel) { dismiss() } // Går tilbake til forsiden etter logging
+        } message: {
+            Text("Godt jobbet! Økten ligger nå i historikken.")
+        }
     }
     
     // --- FUNKSJONER ---
+    
+    // NY FUNKSJON: KOPIERER TIL HISTORIKK
+    private func logWorkout() {
+        // 1. Lag en ny logg-oppføring
+        let log = WorkoutLog(routineName: routine.name, date: Date())
+        
+        // 2. Kopier hver øvelse (Snapshot)
+        for segment in uiSegments {
+            // Vi bruker hjelpefunksjonen vår til å lage en fin tekst av resultatet
+            let resultText = segmentDescription(for: segment)
+            
+            let loggedExercise = LoggedExercise(
+                name: segment.name,
+                categoryRawValue: segment.category.rawValue,
+                resultText: resultText
+            )
+            log.exercises.append(loggedExercise)
+        }
+        
+        // 3. Lagre
+        modelContext.insert(log)
+        try? modelContext.save()
+        
+        // 4. Vis bekreftelse
+        showLogConfirmation = true
+    }
     
     private func closeAllPanels() {
         withAnimation(.snappy) {
@@ -236,7 +258,7 @@ struct CircuitDetailView: View {
     }
     
     private func openPickerFor(segment: CircuitExercise) {
-        if segment.type == .duration || segment.type == .pause {
+        if segment.category == .cardio || segment.category == .other {
             activePicker = PickerState(title: "Endre tid (sek)", binding: Binding(get: { segment.durationSeconds }, set: { segment.durationSeconds = $0 }), range: 5...600, step: 5)
         } else {
             activePicker = PickerState(title: "Endre reps", binding: Binding(get: { segment.targetReps }, set: { segment.targetReps = $0 }), range: 1...100, step: 1)
@@ -254,6 +276,9 @@ struct CircuitDetailView: View {
     }
 }
 
+// ... (Resten av filen: DraggableSegmentView, DrawerView, GridDropDelegate, ScaleButtonStyle, Helpers er uendret) ...
+// Du trenger ikke lime inn DraggableSegmentView etc på nytt hvis du beholder det som var under "body".
+// Men husk at 'segmentDescription' funksjonen MÅ være der for at logWorkout skal fungere.
 // --- DRAGGABLE VIEW COMPONENT ---
 
 struct DraggableSegmentView: View {
@@ -267,14 +292,15 @@ struct DraggableSegmentView: View {
     var body: some View {
         HStack(spacing: 8) {
             ZStack(alignment: .topTrailing) {
-                TreningsKort(tittel: segment.name, undertittel: segmentDescription(for: segment), ikon: iconForSegment(segment), bakgrunnsfarge: theme.color(for: segment.category), tekstFarge: segment.type == .pause ? .primary : theme.textColor)
+                // RETTET: Bruker Color.primary eksplisitt
+                TreningsKort(tittel: segment.name, undertittel: segmentDescription(for: segment), ikon: iconForSegment(segment), bakgrunnsfarge: theme.color(for: segment.category), tekstFarge: segment.category == .other ? Color.primary : theme.textColor)
                     .onTapGesture { onEdit() }
                     .aspectRatio(1.0, contentMode: .fit)
                     .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
                     .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
                 
                 Button(action: onEditValue) {
-                    ZStack { Circle().fill(Color.white).shadow(radius: 2); Text("\(valueToDisplay())").font(.system(size: 12, weight: .bold)).foregroundStyle(.black) }
+                    ZStack { Circle().fill(Color.white).shadow(radius: 2); Text("\(valueToDisplay())").font(.system(size: 12, weight: .bold)).foregroundStyle(Color.black) }
                         .frame(width: 28, height: 28)
                 }
                 .offset(x: 8, y: -8)
@@ -285,12 +311,15 @@ struct DraggableSegmentView: View {
     }
     
     func valueToDisplay() -> Int {
-        if segment.type == .duration || segment.type == .pause { return segment.durationSeconds } else { return segment.targetReps }
+        if segment.category == .cardio || segment.category == .other {
+            return segment.durationSeconds
+        } else {
+            return segment.targetReps
+        }
     }
 }
 
 // --- GENERISK SKUFFER ---
-
 struct DrawerView<Content: View>: View {
     let theme: AppTheme
     let edge: VerticalEdge
@@ -311,17 +340,15 @@ struct DrawerView<Content: View>: View {
     var body: some View {
         VStack {
             if edge == .bottom { Spacer() }
-            
             content
                 .background(theme.drawerBackgroundColor)
                 .clipShape(RoundedRectangle(cornerRadius: theme.drawerCornerRadius))
                 .shadow(color: theme.drawerShadowColor, radius: 20, x: 0, y: edge == .top ? 10 : -10)
                 .padding(.horizontal, 16)
-                .padding(.top, edge == .top ? 100 : 0)
+                .padding(.top, edge == .top ? 10 : 0)
                 .padding(.bottom, edge == .bottom ? 40 : 0)
                 .frame(maxHeight: maxHeight)
                 .animation(.snappy, value: maxHeight)
-            
             if edge == .top { Spacer() }
         }
         .transition(.move(edge: edge == .top ? .top : .bottom))
@@ -354,9 +381,20 @@ struct ScaleButtonStyle: ButtonStyle {
 }
 
 func segmentDescription(for segment: CircuitExercise) -> String {
-    switch segment.type { case .duration: return "\(segment.durationSeconds) sek"; case .reps: return "\(segment.targetReps) reps"; case .stopwatch: return "Tid på \(segment.targetReps) reps"; case .pause: return "\(segment.durationSeconds) sek hvile" }
+    switch segment.category {
+    case .strength:
+        let weightInfo = segment.weight > 0 ? " @ \(Int(segment.weight))kg" : ""
+        return "\(segment.targetReps) reps\(weightInfo)"
+    case .cardio:
+        let distInfo = segment.distance > 0 ? " (\(Int(segment.distance)) m)" : ""
+        return "\(segment.durationSeconds) sek\(distInfo)"
+    case .other:
+        return "\(segment.durationSeconds) sek" // Viser bare tid, navnet forklarer hva det er
+    case .combined:
+        return "\(segment.targetReps) reps / \(segment.durationSeconds) sek"
+    }
 }
 
 func iconForSegment(_ segment: CircuitExercise) -> String? {
-    switch segment.category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "ellipsis.circle.fill" }
+    switch segment.category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
 }

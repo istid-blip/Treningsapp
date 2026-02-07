@@ -1,19 +1,18 @@
-//
-//  TreningsappApp.swift
-//  Treningsapp
-//
-//  Created by Frode Halrynjo on 04/02/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
-struct TreningsappApp: App { // Bytt navn til det prosjektet ditt heter
+struct TreningsappApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: CircuitRoutine.self)
+        // HER ER ENDRINGEN: Vi må inkludere de nye logg-modellene
+        .modelContainer(for: [
+            CircuitRoutine.self,
+            CircuitExercise.self,
+            WorkoutLog.self,      // <--- Ny
+            LoggedExercise.self   // <--- Ny
+        ])
     }
 }
