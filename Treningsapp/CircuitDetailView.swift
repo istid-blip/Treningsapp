@@ -33,6 +33,9 @@ struct CircuitDetailView: View {
     @State private var uiSegments: [CircuitExercise] = []
     @State private var showLogConfirmation = false
     
+    // NY: Husker hva navnet var da vi kom inn
+    @State private var originalName: String = ""
+    
     // Grid configuration
     let columns = [GridItem(.adaptive(minimum: 110), spacing: 16)]
     let currentTheme: AppTheme = .standard
@@ -48,7 +51,14 @@ struct CircuitDetailView: View {
                         
                         // 1. HEADER
                         HStack {
-                            Button(action: { dismiss() }) {
+                            // NY LOGIKK: Tilbake-knappen
+                            Button(action: {
+                                // Sjekk: Er økten tom OG har navnet vi startet med?
+                                if routine.segments.isEmpty && routine.name == originalName {
+                                    modelContext.delete(routine)
+                                }
+                                dismiss()
+                            }) {
                                 HStack(spacing: 5) {
                                     Image(systemName: "chevron.left").bold()
                                     Text("Tilbake")
@@ -191,7 +201,13 @@ struct CircuitDetailView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { refreshUILoad() }
+        .onAppear {
+            refreshUILoad()
+            // Lagre originalnavnet når vi åpner siden
+            if originalName.isEmpty {
+                originalName = routine.name
+            }
+        }
         .alert("Økt logget!", isPresented: $showLogConfirmation) {
             Button("OK", role: .cancel) { dismiss() }
         } message: {
@@ -222,44 +238,27 @@ struct CircuitDetailView: View {
         }
     }
     
-
-    // Funksjon for å lagre til historikk
-        private func logWorkout() {
-            // 1. Lag en ny logg
-            let log = WorkoutLog(routineName: routine.name, date: Date())
-            
-            // 2. Kopier data fra øvelsene
-            for segment in uiSegments {
-                let loggedExercise = LoggedExercise(
-                    name: segment.name,
-                    categoryRawValue: segment.category.rawValue,
-                    duration: segment.durationSeconds,
-                    reps: segment.targetReps,
-                    weight: segment.weight,
-                    distance: segment.distance,
-                    note: segment.note
-                )
-                
-                // FEILEN VAR HER: Vi satte original-verdiene med en gang.
-                // Nå fjerner vi disse linjene, slik at de forblir 'nil' inntil du faktisk redigerer dem.
-                
-                /* Slettet kode:
-                loggedExercise.originalDuration = segment.durationSeconds
-                loggedExercise.originalReps = segment.targetReps
-                loggedExercise.originalWeight = segment.weight
-                loggedExercise.originalDistance = segment.distance
-                */
-                
-                log.exercises.append(loggedExercise)
-            }
-            
-            // 3. Lagre til databasen
-            modelContext.insert(log)
-            try? modelContext.save()
-            
-            // 4. Vis bekreftelse
-            showLogConfirmation = true
+    private func logWorkout() {
+        let log = WorkoutLog(routineName: routine.name, date: Date())
+        
+        for segment in uiSegments {
+            let loggedExercise = LoggedExercise(
+                name: segment.name,
+                categoryRawValue: segment.category.rawValue,
+                duration: segment.durationSeconds,
+                reps: segment.targetReps,
+                weight: segment.weight,
+                distance: segment.distance,
+                note: segment.note
+            )
+            log.exercises.append(loggedExercise)
         }
+        
+        modelContext.insert(log)
+        try? modelContext.save()
+        
+        showLogConfirmation = true
+    }
     
     private func closeAllPanels() {
         withAnimation(.snappy) {
@@ -302,7 +301,6 @@ struct DraggableSegmentView: View {
     var body: some View {
         HStack(spacing: 8) {
             ZStack(alignment: .topTrailing) {
-                // Her bruker vi nå manuell init av TreningsKort
                 TreningsKort(
                     tittel: segment.name,
                     undertittel: segmentDescription(for: segment),

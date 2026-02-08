@@ -4,13 +4,16 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     
-    // ENDRING: Sorterer nå på sortIndex (lavest tall først = øverst)
+    // Sorterer på sortIndex (lavest tall først = øverst)
     @Query(sort: \CircuitRoutine.sortIndex, order: .forward) private var routines: [CircuitRoutine]
     
     @Query(sort: \WorkoutLog.date, order: .reverse) private var logs: [WorkoutLog]
     
     @AppStorage("numberOfRecentCards") private var numberOfRecentCards: Int = 6
     @State private var showingSettings = false
+    
+    // NY: Styrer navigering til ny økt
+    @State private var routineToNavigate: CircuitRoutine?
     
     let columns = [GridItem(.adaptive(minimum: 105), spacing: 10)]
     
@@ -56,7 +59,7 @@ struct ContentView: View {
                                 .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
                             }
                             
-                            // B: DE SISTE ØKTENE (Sortert etter brukerens valg)
+                            // B: DE SISTE ØKTENE
                             ForEach(recentRoutines) { routine in
                                 NavigationLink(destination: CircuitDetailView(routine: routine)) {
                                     TreningsKort(routine: routine).aspectRatio(1, contentMode: .fit)
@@ -109,6 +112,10 @@ struct ContentView: View {
                     .padding(.horizontal)
                 }
             }
+            // NY: Navigerer automatisk når en ny økt lages
+            .navigationDestination(item: $routineToNavigate) { routine in
+                CircuitDetailView(routine: routine)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSettings) {
                 SettingsSheet(maxCount: $numberOfRecentCards).presentationDetents([.fraction(0.3)])
@@ -116,27 +123,44 @@ struct ContentView: View {
         }
     }
 
-    // ENDRET LOGIKK: Legger ny økt øverst (index 0) og skyver resten ned
+    // NY LOGIKK: Unike navn og autonavigering
     func addRoutine() {
-        // 1. Skyv alle eksisterende ned ett hakk
+        // 1. Finn et unikt navn
+        let baseName = "Ny Økt"
+        var newName = baseName
+        var counter = 2
+        
+        let existingNames = routines.map { $0.name }
+        
+        while existingNames.contains(newName) {
+            newName = "\(baseName) \(counter)"
+            counter += 1
+        }
+        
+        // 2. Skyv eksisterende økter ned
         for routine in routines {
             routine.sortIndex += 1
         }
         
-        // 2. Lag ny på index 0
-        let newRoutine = CircuitRoutine(name: "Ny Økt")
+        // 3. Lag ny økt
+        let newRoutine = CircuitRoutine(name: newName)
         newRoutine.sortIndex = 0
         
         modelContext.insert(newRoutine)
+        
+        // 4. Trigger navigering
+        routineToNavigate = newRoutine
+        
         try? modelContext.save()
     }
     
+    // Denne manglet sannsynligvis:
     func deleteLog(at offsets: IndexSet) {
         for index in offsets { modelContext.delete(logs[index]) }
     }
 }
 
-// --- INNSTILLINGER ---
+// --- INNSTILLINGER OG HJELPEVIEWS (Uendret) ---
 
 struct SettingsSheet: View {
     @Binding var maxCount: Int
@@ -146,7 +170,6 @@ struct SettingsSheet: View {
         NavigationStack {
             Form {
                 Section(header: Text("Hjem-skjerm")) {
-                    // ENDRET: Range er nå 4 til 7
                     Stepper(value: $maxCount, in: 4...7) {
                         HStack {
                             Text("Antall snarveier")
@@ -156,7 +179,7 @@ struct SettingsSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text("Velg mellom 4 og 7 snarveier (f.eks. en for hver ukedag).")
+                    Text("Velg mellom 4 og 7 snarveier.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -171,9 +194,6 @@ struct SettingsSheet: View {
         }
     }
 }
-
-
-// --- HISTORY ROW ---
 
 struct HistoryRow: View {
     let log: WorkoutLog
