@@ -1,3 +1,9 @@
+//
+//  TreningsappApp.swift
+//  Treningsapp
+//
+//  Created by Frode Halrynjo on 04/02/2026.
+//
 import SwiftUI
 import SwiftData
 

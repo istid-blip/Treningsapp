@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
-// ... (DrawerState og PickerState er uendret) ...
+// UI States
 enum DrawerState: Identifiable {
     case editSegment(CircuitExercise)
     var id: String {
@@ -31,8 +31,9 @@ struct CircuitDetailView: View {
     @State private var activePicker: PickerState? = nil
     
     @State private var uiSegments: [CircuitExercise] = []
-    @State private var showLogConfirmation = false // Ny: Bekreftelse
+    @State private var showLogConfirmation = false
     
+    // Grid configuration
     let columns = [GridItem(.adaptive(minimum: 110), spacing: 16)]
     let currentTheme: AppTheme = .standard
     let pickerHeight: CGFloat = 320
@@ -45,7 +46,7 @@ struct CircuitDetailView: View {
                 ZStack(alignment: .bottom) {
                     VStack(spacing: 0) {
                         
-                        // 1. EGEN HEADER (Uendret)
+                        // 1. HEADER
                         HStack {
                             Button(action: { dismiss() }) {
                                 HStack(spacing: 5) {
@@ -90,32 +91,12 @@ struct CircuitDetailView: View {
                                     
                                     // LEGG TIL KNAPP
                                     HStack(spacing: 8) {
-                                        Button(action: {
-                                            let nextNumber = routine.segments.count + 1
-                                            let autoName = "Segment \(nextNumber)"
-                                            
-                                            let newSegment = CircuitExercise(
-                                                name: autoName,
-                                                durationSeconds: 45,
-                                                targetReps: 10,
-                                                category: .strength,
-                                                note: "",
-                                                sortIndex: routine.segments.count
-                                            )
-                                            
-                                            modelContext.insert(newSegment)
-                                            routine.segments.append(newSegment)
-                                            
-                                            withAnimation(.snappy) {
-                                                activeDrawer = .editSegment(newSegment)
-                                            }
-                                        }) {
+                                        Button(action: addSegment) {
                                             TreningsKort(tittel: "Legg til", ikon: "plus", bakgrunnsfarge: Color(.systemGray6), tekstFarge: .blue)
                                                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(style: StrokeStyle(lineWidth: 2, dash: [5])).foregroundStyle(Color.blue.opacity(0.5)))
                                         }
                                         .buttonStyle(ScaleButtonStyle())
                                         .aspectRatio(1.0, contentMode: .fit)
-                                        Color.clear.frame(width: 20)
                                     }
                                 }
                                 .padding(.horizontal)
@@ -125,7 +106,7 @@ struct CircuitDetailView: View {
                         }
                     }
                     
-                    // --- NY LOGG KNAPP (Erstatter Start Trening) ---
+                    // --- LOGG KNAPP ---
                     if !routine.segments.isEmpty {
                         Button(action: logWorkout) {
                             HStack {
@@ -136,7 +117,7 @@ struct CircuitDetailView: View {
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.green) // Grønn for fullført/logg
+                            .background(Color.green)
                             .cornerRadius(12)
                             .padding()
                             .shadow(radius: 5)
@@ -154,7 +135,7 @@ struct CircuitDetailView: View {
                         .zIndex(10)
                 }
                 
-                // --- HOVEDSKUFF ---
+                // --- HOVEDSKUFF (Add/Edit) ---
                 if let drawerState = activeDrawer {
                     let availableHeight = activePicker != nil
                         ? (geometry.size.height - pickerHeight)
@@ -173,9 +154,7 @@ struct CircuitDetailView: View {
                                     }
                                 },
                                 onTyping: {
-                                    withAnimation(.snappy) {
-                                        activePicker = nil
-                                    }
+                                    withAnimation(.snappy) { activePicker = nil }
                                 }
                             )
                         }
@@ -214,7 +193,7 @@ struct CircuitDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { refreshUILoad() }
         .alert("Økt logget!", isPresented: $showLogConfirmation) {
-            Button("OK", role: .cancel) { dismiss() } // Går tilbake til forsiden etter logging
+            Button("OK", role: .cancel) { dismiss() }
         } message: {
             Text("Godt jobbet! Økten ligger nå i historikken.")
         }
@@ -222,33 +201,60 @@ struct CircuitDetailView: View {
     
     // --- FUNKSJONER ---
     
-    // NY FUNKSJON: KOPIERER TIL HISTORIKK
-    // NY FUNKSJON: KOPIERER TIL HISTORIKK MED RÅDATA
-        private func logWorkout() {
-            // 1. Lag en ny logg-oppføring
-            let log = WorkoutLog(routineName: routine.name, date: Date())
-            
-            // 2. Kopier hver øvelse (Snapshot)
-            for segment in uiSegments {
-                let loggedExercise = LoggedExercise(
-                    name: segment.name,
-                    categoryRawValue: segment.category.rawValue,
-                    duration: segment.durationSeconds,
-                    reps: segment.targetReps,
-                    weight: segment.weight,
-                    distance: segment.distance,
-                    note: segment.note
-                )
-                log.exercises.append(loggedExercise)
-            }
-            
-            // 3. Lagre
-            modelContext.insert(log)
-            try? modelContext.save()
-            
-            // 4. Vis bekreftelse
-            showLogConfirmation = true
+    func addSegment() {
+        let nextNumber = routine.segments.count + 1
+        let autoName = "Øvelse \(nextNumber)"
+        
+        let newSegment = CircuitExercise(
+            name: autoName,
+            durationSeconds: 45,
+            targetReps: 10,
+            category: .strength,
+            note: "",
+            sortIndex: routine.segments.count
+        )
+        
+        modelContext.insert(newSegment)
+        routine.segments.append(newSegment)
+        
+        withAnimation(.snappy) {
+            activeDrawer = .editSegment(newSegment)
         }
+    }
+    
+    // Funksjon for å lagre til historikk
+    private func logWorkout() {
+        // 1. Lag en ny logg
+        let log = WorkoutLog(routineName: routine.name, date: Date())
+        
+        // 2. Kopier data fra øvelsene
+        for segment in uiSegments {
+            // Her bruker vi LoggedExercise init som vi definerte i DataModels
+            let loggedExercise = LoggedExercise(
+                name: segment.name,
+                categoryRawValue: segment.category.rawValue,
+                duration: segment.durationSeconds,
+                reps: segment.targetReps,
+                weight: segment.weight,
+                distance: segment.distance,
+                note: segment.note
+            )
+            // Sett originalverdier slik at vi kan spore endringer senere
+            loggedExercise.originalDuration = segment.durationSeconds
+            loggedExercise.originalReps = segment.targetReps
+            loggedExercise.originalWeight = segment.weight
+            loggedExercise.originalDistance = segment.distance
+            
+            log.exercises.append(loggedExercise)
+        }
+        
+        // 3. Lagre til databasen
+        modelContext.insert(log)
+        try? modelContext.save()
+        
+        // 4. Vis bekreftelse
+        showLogConfirmation = true
+    }
     
     private func closeAllPanels() {
         withAnimation(.snappy) {
@@ -278,10 +284,7 @@ struct CircuitDetailView: View {
     }
 }
 
-// ... (Resten av filen: DraggableSegmentView, DrawerView, GridDropDelegate, ScaleButtonStyle, Helpers er uendret) ...
-// Du trenger ikke lime inn DraggableSegmentView etc på nytt hvis du beholder det som var under "body".
-// Men husk at 'segmentDescription' funksjonen MÅ være der for at logWorkout skal fungere.
-// --- DRAGGABLE VIEW COMPONENT ---
+// --- HJELPEKOMPONENTER ---
 
 struct DraggableSegmentView: View {
     var segment: CircuitExercise
@@ -294,21 +297,38 @@ struct DraggableSegmentView: View {
     var body: some View {
         HStack(spacing: 8) {
             ZStack(alignment: .topTrailing) {
-                // RETTET: Bruker Color.primary eksplisitt
-                TreningsKort(tittel: segment.name, undertittel: segmentDescription(for: segment), ikon: iconForSegment(segment), bakgrunnsfarge: theme.color(for: segment.category), tekstFarge: segment.category == .other ? Color.primary : theme.textColor)
-                    .onTapGesture { onEdit() }
-                    .aspectRatio(1.0, contentMode: .fit)
-                    .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
-                    .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
+                // Her bruker vi nå manuell init av TreningsKort
+                TreningsKort(
+                    tittel: segment.name,
+                    undertittel: segmentDescription(for: segment),
+                    ikon: iconForSegment(segment),
+                    bakgrunnsfarge: theme.color(for: segment.category),
+                    tekstFarge: segment.category == .other ? Color.primary : theme.textColor
+                )
+                .onTapGesture { onEdit() }
+                .aspectRatio(1.0, contentMode: .fit)
+                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
+                .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
                 
                 Button(action: onEditValue) {
-                    ZStack { Circle().fill(Color.white).shadow(radius: 2); Text("\(valueToDisplay())").font(.system(size: 12, weight: .bold)).foregroundStyle(Color.black) }
-                        .frame(width: 28, height: 28)
+                    ZStack {
+                        Circle().fill(Color.white).shadow(radius: 2)
+                        Text("\(valueToDisplay())")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.black)
+                    }
+                    .frame(width: 28, height: 28)
                 }
                 .offset(x: 8, y: -8)
             }
             .zIndex(1)
-            Image(systemName: theme.arrowIcon).font(.title3).fontWeight(.bold).foregroundStyle(theme.arrowColor).frame(width: 20).opacity(isLast ? 0 : 1)
+            
+            Image(systemName: theme.arrowIcon)
+                .font(.title3)
+                .fontWeight(.bold)
+                .foregroundStyle(theme.arrowColor)
+                .frame(width: 20)
+                .opacity(isLast ? 0 : 1)
         }
     }
     
@@ -321,7 +341,6 @@ struct DraggableSegmentView: View {
     }
 }
 
-// --- GENERISK SKUFFER ---
 struct DrawerView<Content: View>: View {
     let theme: AppTheme
     let edge: VerticalEdge
@@ -347,7 +366,7 @@ struct DrawerView<Content: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: theme.drawerCornerRadius))
                 .shadow(color: theme.drawerShadowColor, radius: 20, x: 0, y: edge == .top ? 10 : -10)
                 .padding(.horizontal, 16)
-                .padding(.top, edge == .top ? 10 : 0)
+                .padding(.top, edge == .top ? 100 : 0)
                 .padding(.bottom, edge == .bottom ? 40 : 0)
                 .frame(maxHeight: maxHeight)
                 .animation(.snappy, value: maxHeight)
@@ -391,7 +410,7 @@ func segmentDescription(for segment: CircuitExercise) -> String {
         let distInfo = segment.distance > 0 ? " (\(Int(segment.distance)) m)" : ""
         return "\(segment.durationSeconds) sek\(distInfo)"
     case .other:
-        return "\(segment.durationSeconds) sek" // Viser bare tid, navnet forklarer hva det er
+        return "\(segment.durationSeconds) sek"
     case .combined:
         return "\(segment.targetReps) reps / \(segment.durationSeconds) sek"
     }

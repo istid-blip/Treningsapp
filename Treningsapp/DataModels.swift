@@ -1,7 +1,13 @@
+//
+//  DataModels.swift
+//  Treningsapp
+//
+//  Created by Frode Halrynjo on 04/02/2026.
+//
 import Foundation
 import SwiftData
 
-// Endret .other tilbake til "Annet"
+// Enum for treningskategorier
 enum ExerciseCategory: String, Codable, CaseIterable {
     case strength = "Styrke"
     case cardio = "Kondisjon"
@@ -9,38 +15,42 @@ enum ExerciseCategory: String, Codable, CaseIterable {
     case other = "Annet"
 }
 
+// Hovedmodellen for en Økt (Routine)
 @Model
 final class CircuitRoutine {
     var name: String
     var createdDate: Date
+    var sortIndex: Int = 0 // Holder orden på rekkefølgen på forsiden
+    
     @Relationship(deleteRule: .cascade) var segments: [CircuitExercise] = []
     
     init(name: String) {
         self.name = name
         self.createdDate = Date()
+        self.sortIndex = 0
     }
 }
 
+// Modellen for en enkelt øvelse i en økt
 @Model
 final class CircuitExercise {
     var name: String
     
-    // Standard data
-    var durationSeconds: Int // Brukes for Kondisjon, Annet, Kombinert
-    var targetReps: Int      // Brukes for Styrke, Kombinert
+    // Verdier
+    var durationSeconds: Int
+    var targetReps: Int
+    var weight: Double
+    var distance: Double
     
-    // NYE FELTER (Valgfrie)
-    var weight: Double = 0.0    // For styrke (kg)
-    var distance: Double = 0.0  // For kondisjon (meter eller km)
+    var categoryRawValue: String
+    var note: String
+    var sortIndex: Int = 0 // Holder orden på rekkefølgen innad i økten
     
-    var categoryRawValue: String = ExerciseCategory.strength.rawValue
+    // Hjelpevariabel for enum
     var category: ExerciseCategory {
         get { ExerciseCategory(rawValue: categoryRawValue) ?? .strength }
         set { categoryRawValue = newValue.rawValue }
     }
-    
-    var note: String
-    var sortIndex: Int = 0
     
     init(name: String,
          durationSeconds: Int = 45,
@@ -61,19 +71,20 @@ final class CircuitExercise {
         self.sortIndex = sortIndex
     }
 }
-// ... (Din eksisterende kode for CircuitRoutine og CircuitExercise beholdes som den er) ...
 
-// --- NYE MODELLER FOR HISTORIKK ---
-
-// --- NYE MODELLER FOR HISTORIKK ---
-
+// Modellen for en fullført treningslogg
 @Model
 final class WorkoutLog {
     var routineName: String
     var date: Date
-    var wasEdited: Bool = false // Nytt felt: Viser om økten er endret i ettertid
+    var wasEdited: Bool = false
     
     @Relationship(deleteRule: .cascade) var exercises: [LoggedExercise] = []
+    
+    // Hjelper: Hvor mange øvelser er endret i ettertid?
+    var editCount: Int {
+        exercises.filter { $0.hasChanges }.count
+    }
     
     init(routineName: String, date: Date = Date()) {
         self.routineName = routineName
@@ -81,17 +92,33 @@ final class WorkoutLog {
     }
 }
 
+// Modellen for en utført øvelse (med historikk for endringer)
 @Model
 final class LoggedExercise {
     var name: String
     var categoryRawValue: String
     
-    // Vi lagrer NÅ rådataene også, slik at vi kan redigere dem
+    // Gjeldende verdier
     var durationSeconds: Int
     var targetReps: Int
     var weight: Double
     var distance: Double
     var note: String
+    
+    // Originale verdier (hvis endret i ettertid)
+    var originalDuration: Int?
+    var originalReps: Int?
+    var originalWeight: Double?
+    var originalDistance: Double?
+    
+    // Sjekker om øvelsen er redigert
+    var hasChanges: Bool {
+        originalDuration != nil || originalReps != nil || originalWeight != nil || originalDistance != nil
+    }
+    
+    var category: ExerciseCategory {
+        ExerciseCategory(rawValue: categoryRawValue) ?? .strength
+    }
     
     init(name: String, categoryRawValue: String, duration: Int, reps: Int, weight: Double, distance: Double, note: String) {
         self.name = name
@@ -101,9 +128,5 @@ final class LoggedExercise {
         self.weight = weight
         self.distance = distance
         self.note = note
-    }
-    
-    var category: ExerciseCategory {
-        ExerciseCategory(rawValue: categoryRawValue) ?? .strength
     }
 }

@@ -12,15 +12,10 @@ struct LogDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) var dismiss
     
-    // UI States for redigering (Samme logikk som før)
+    // UI States
     @State private var activeDrawer: DrawerState? = nil
     @State private var activePicker: PickerState? = nil
-    
-    // Vi trenger en midlertidig "dummy" rutine for at AddSegmentView skal fungere,
-    // selv om vi ikke lagrer til den.
     @State private var tempRoutine = CircuitRoutine(name: "Temp")
-    
-    // For å vite hvilken logg-rad vi redigerer
     @State private var editingLogExercise: LoggedExercise?
     
     let theme = AppTheme.standard
@@ -29,8 +24,6 @@ struct LogDetailView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .top) {
-                
-                // --- BAKGRUNN ---
                 Color(.systemGroupedBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
@@ -44,23 +37,21 @@ struct LogDetailView: View {
                         }
                         Spacer()
                         VStack {
-                            Text(log.routineName)
-                                .font(.headline)
+                            Text(log.routineName).font(.headline)
                             Text(log.date.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        // Usynlig spacer for balanse
                         Color.clear.frame(width: 60, height: 44)
                     }
                     .padding()
-                    .background(Color(.systemBackground))
+                    .background(Color(.secondarySystemGroupedBackground)) // Oppdatert til systemfarge
                     
-                    // STATUS BAR FOR REDIGERING
-                    if log.wasEdited {
+                    // STATUS BAR (Oppdatert tekst)
+                    if log.wasEdited || log.editCount > 0 {
                         HStack {
                             Image(systemName: "pencil.and.list.clipboard")
-                            Text("Denne økten er justert etter gjennomføring")
+                            Text("Loggføringen har \(log.editCount) justeringer")
                         }
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -69,7 +60,7 @@ struct LogDetailView: View {
                         .background(Color.orange.opacity(0.1))
                     }
                     
-                    // LISTE OVER UTFØRTE ØVELSER (Annerledes design enn planlegging)
+                    // LISTE
                     List {
                         ForEach(log.exercises) { exercise in
                             Button(action: { startEditing(exercise) }) {
@@ -90,24 +81,29 @@ struct LogDetailView: View {
                                             .font(.headline)
                                             .foregroundStyle(.primary)
                                         
-                                        Text(descriptionText(for: exercise))
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                        // Her kaller vi den nye visningen for detaljer
+                                        DetailChangeView(exercise: exercise)
                                     }
                                     
                                     Spacer()
                                     
-                                    Image(systemName: "pencil")
-                                        .foregroundStyle(.gray.opacity(0.5))
+                                    // Viser blyant hvis denne spesifikke raden er endret
+                                    if exercise.hasChanges {
+                                        Image(systemName: "pencil.circle.fill")
+                                            .foregroundStyle(.orange)
+                                    } else {
+                                        Image(systemName: "pencil")
+                                            .foregroundStyle(.gray.opacity(0.3))
+                                    }
                                 }
                                 .padding(.vertical, 4)
                             }
-                            .listRowBackground(Color.white)
+                            .listRowBackground(Color(.secondarySystemGroupedBackground)) // Dark mode fix
                         }
                         .onDelete(perform: deleteExercise)
                     }
                     .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden) // Fjerner standard grå bakgrunn
+                    .scrollContentBackground(.hidden)
                 }
                 
                 // --- DIMMING ---
@@ -119,7 +115,7 @@ struct LogDetailView: View {
                         .zIndex(10)
                 }
                 
-                // --- SKUFF (ADD SEGMENT VIEW) ---
+                // --- SKUFF ---
                 if let drawerState = activeDrawer {
                     let availableHeight = activePicker != nil
                         ? (geometry.size.height - pickerHeight)
@@ -129,9 +125,9 @@ struct LogDetailView: View {
                         switch drawerState {
                         case .editSegment(let segment):
                             AddSegmentView(
-                                routine: tempRoutine, // Dummy
+                                routine: tempRoutine,
                                 segmentToEdit: segment,
-                                onDismiss: { saveChangesAndClose(from: segment) },
+                                onDismiss: { closeAllPanels() },
                                 onRequestPicker: { title, binding, range, step in
                                     withAnimation(.snappy) {
                                         activePicker = PickerState(title: title, binding: binding, range: range, step: step)
@@ -165,14 +161,36 @@ struct LogDetailView: View {
         .navigationBarHidden(true)
     }
     
-    // --- LOGIKK ---
+    // --- NY LOGIKK FOR LAGRING AV ENDRINGER ---
+    
+    func commitTempChanges(from tempSegment: CircuitExercise) {
+        guard let exercise = editingLogExercise else { return }
+        
+        if tempSegment.isDeleted {
+            // modelContext.delete(exercise) // Valgfritt
+            return
+        }
+
+        // Bruk hjelpefunksjonen på alle feltene
+        updateLogValue(&exercise.durationSeconds, &exercise.originalDuration, tempSegment.durationSeconds)
+        updateLogValue(&exercise.targetReps, &exercise.originalReps, tempSegment.targetReps)
+        updateLogValue(&exercise.weight, &exercise.originalWeight, tempSegment.weight)
+        updateLogValue(&exercise.distance, &exercise.originalDistance, tempSegment.distance)
+
+        // Oppdater tekst-feltene direkte (trenger ikke historikk på navn/kategori/notat)
+        exercise.name = tempSegment.name
+        exercise.categoryRawValue = tempSegment.category.rawValue
+        exercise.note = tempSegment.note
+        
+        // VIKTIG: Sjekk om loggen faktisk har endringer igjen
+        // Hvis brukeren har rettet alt tilbake til originalt, skal ikke loggen være markert som "Edited" lenger.
+        log.wasEdited = log.exercises.contains { $0.hasChanges }
+        
+        try? modelContext.save()
+    }
     
     func startEditing(_ exercise: LoggedExercise) {
-        // 1. Lagre referanse til logg-objektet vi redigerer
         editingLogExercise = exercise
-        
-        // 2. Konverter LoggedExercise -> Temporary CircuitExercise
-        // Dette gjør at vi kan gjenbruke AddSegmentView uten å endre koden der!
         let tempSegment = CircuitExercise(
             name: exercise.name,
             durationSeconds: exercise.durationSeconds,
@@ -182,34 +200,37 @@ struct LogDetailView: View {
             category: exercise.category,
             note: exercise.note
         )
-        
-        // 3. Åpne skuffen med det midlertidige objektet
-        withAnimation(.snappy) {
-            activeDrawer = .editSegment(tempSegment)
+        withAnimation(.snappy) { activeDrawer = .editSegment(tempSegment) }
+    }
+    
+    // Hjelpefunksjon for å håndtere logikk for "angre" vs "endre"
+    func updateLogValue<T: Equatable>(_ current: inout T, _ original: inout T?, _ newValue: T) {
+        if let old = original {
+            // Vi har allerede en endring lagret
+            if newValue == old {
+                // Verdien er satt tilbake til originalen -> Slett historikken
+                current = newValue
+                original = nil
+            } else {
+                // Verdien er endret til noe annet -> Oppdater nåverdi
+                current = newValue
+            }
+        } else if newValue != current {
+            // Første gang verdien endres
+            original = current
+            current = newValue
         }
     }
     
-    func saveChangesAndClose(from tempSegment: CircuitExercise) {
-        guard let originalExercise = editingLogExercise else { return }
-        
-        // 1. Sjekk om sletting ble trigget i AddSegmentView (hvis den ble fjernet fra tempRoutine)
-        // (Enkelt triks: Vi kan legge til slette-logikk her hvis nødvendig, men swipe-to-delete dekker det meste)
-        
-        // 2. Kopier verdiene TILBAKE fra temp til logg
-        originalExercise.name = tempSegment.name
-        originalExercise.categoryRawValue = tempSegment.category.rawValue
-        originalExercise.durationSeconds = tempSegment.durationSeconds
-        originalExercise.targetReps = tempSegment.targetReps
-        originalExercise.weight = tempSegment.weight
-        originalExercise.distance = tempSegment.distance
-        originalExercise.note = tempSegment.note
-        
-        // 3. Merk loggen som redigert
-        log.wasEdited = true
-        
-        // 4. Lagre og lukk
-        try? modelContext.save()
-        closeAllPanels()
+    func closeAllPanels() {
+        if case .editSegment(let tempSegment) = activeDrawer {
+            commitTempChanges(from: tempSegment)
+        }
+        withAnimation(.snappy) {
+            activeDrawer = nil
+            activePicker = nil
+        }
+        editingLogExercise = nil
     }
     
     func deleteExercise(at offsets: IndexSet) {
@@ -221,29 +242,80 @@ struct LogDetailView: View {
         try? modelContext.save()
     }
     
-    func closeAllPanels() {
-        withAnimation(.snappy) {
-            activeDrawer = nil
-            activePicker = nil
-        }
-        editingLogExercise = nil
-    }
-    
-    // Hjelpere for visning
     func iconName(for category: ExerciseCategory) -> String {
         switch category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
     }
+}
+
+// --- NY KOMPONENT: Viser gammel vs ny verdi ---
+
+struct DetailChangeView: View {
+    let exercise: LoggedExercise
     
-    func descriptionText(for exercise: LoggedExercise) -> String {
-        switch exercise.category {
-        case .strength:
-            let w = exercise.weight > 0 ? " @ \(Int(exercise.weight))kg" : ""
-            return "\(exercise.targetReps) reps\(w)"
-        case .cardio:
-            let d = exercise.distance > 0 ? " (\(Int(exercise.distance)) m)" : ""
-            return "\(exercise.durationSeconds) sek\(d)"
-        case .other: return "\(exercise.durationSeconds) sek"
-        case .combined: return "\(exercise.targetReps) reps / \(exercise.durationSeconds) sek"
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            
+            // Styrke / Kombinert / Reps
+            if exercise.category == .strength || exercise.category == .combined {
+                changeText(current: exercise.targetReps, original: exercise.originalReps, unit: "reps")
+                changeText(current: exercise.weight, original: exercise.originalWeight, unit: "kg")
+            }
+            
+            // Cardio / Annet / Tid
+            if exercise.category == .cardio || exercise.category == .other || exercise.category == .combined {
+                changeText(current: exercise.durationSeconds, original: exercise.originalDuration, unit: "sek")
+            }
+            
+            // Distanse
+            if exercise.category == .cardio {
+                changeText(current: exercise.distance, original: exercise.originalDistance, unit: "m")
+            }
+        }
+    }
+    
+    // Hjelper for Int (Reps/Tid)
+    @ViewBuilder
+    func changeText(current: Int, original: Int?, unit: String) -> some View {
+        if let original = original, original != current {
+            HStack(spacing: 4) {
+                Text("\(original)")
+                    .strikethrough()
+                    .foregroundStyle(.red.opacity(0.8))
+                Image(systemName: "arrow.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\(current) \(unit)")
+                    .bold()
+                    .foregroundStyle(.green) // Eller .primary om du vil ha det mer nøytralt
+            }
+            .font(.subheadline)
+        } else if current > 0 {
+            Text("\(current) \(unit)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    // Hjelper for Double (Vekt/Distanse)
+    @ViewBuilder
+    func changeText(current: Double, original: Double?, unit: String) -> some View {
+        if let original = original, original != current {
+            HStack(spacing: 4) {
+                Text("\(Int(original))")
+                    .strikethrough()
+                    .foregroundStyle(.red.opacity(0.8))
+                Image(systemName: "arrow.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\(Int(current)) \(unit)")
+                    .bold()
+                    .foregroundStyle(.green)
+            }
+            .font(.subheadline)
+        } else if current > 0 {
+            Text("\(Int(current)) \(unit)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 }

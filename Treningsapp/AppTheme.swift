@@ -53,24 +53,24 @@ extension AppTheme {
         name: "Standard",
         arrowIcon: "arrow.right",
         arrowColor: .gray.opacity(0.6),
-        textColor: .white,
-        backgroundColor: .white,
+        textColor: .primary,
+        backgroundColor: Color(.systemBackground),
         drawerBackgroundColor: Color(.systemGroupedBackground),
         drawerHeaderColor: Color(.systemGray6),
         drawerCornerRadius: 24,
-        drawerShadowColor: .black.opacity(0.2)
+        drawerShadowColor: Color.primary.opacity(0.1)
     )
     
     static let minimal = AppTheme(
         name: "Minimal",
         arrowIcon: "chevron.right", // En tynnere pil
-        arrowColor: .black,
-        textColor: .black,
+        arrowColor: .primary,
+        textColor: .primary,
         backgroundColor: Color(.systemGray6),
         
         drawerBackgroundColor: Color(.systemGray6),
         drawerHeaderColor: Color(.systemGray5),
         drawerCornerRadius: 16, // Litt skarpere hjørner
-        drawerShadowColor: .white.opacity(0.1)
+        drawerShadowColor: Color.primary.opacity(0.1)
     )
 }
