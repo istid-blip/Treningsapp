@@ -222,39 +222,44 @@ struct CircuitDetailView: View {
         }
     }
     
+
     // Funksjon for å lagre til historikk
-    private func logWorkout() {
-        // 1. Lag en ny logg
-        let log = WorkoutLog(routineName: routine.name, date: Date())
-        
-        // 2. Kopier data fra øvelsene
-        for segment in uiSegments {
-            // Her bruker vi LoggedExercise init som vi definerte i DataModels
-            let loggedExercise = LoggedExercise(
-                name: segment.name,
-                categoryRawValue: segment.category.rawValue,
-                duration: segment.durationSeconds,
-                reps: segment.targetReps,
-                weight: segment.weight,
-                distance: segment.distance,
-                note: segment.note
-            )
-            // Sett originalverdier slik at vi kan spore endringer senere
-            loggedExercise.originalDuration = segment.durationSeconds
-            loggedExercise.originalReps = segment.targetReps
-            loggedExercise.originalWeight = segment.weight
-            loggedExercise.originalDistance = segment.distance
+        private func logWorkout() {
+            // 1. Lag en ny logg
+            let log = WorkoutLog(routineName: routine.name, date: Date())
             
-            log.exercises.append(loggedExercise)
+            // 2. Kopier data fra øvelsene
+            for segment in uiSegments {
+                let loggedExercise = LoggedExercise(
+                    name: segment.name,
+                    categoryRawValue: segment.category.rawValue,
+                    duration: segment.durationSeconds,
+                    reps: segment.targetReps,
+                    weight: segment.weight,
+                    distance: segment.distance,
+                    note: segment.note
+                )
+                
+                // FEILEN VAR HER: Vi satte original-verdiene med en gang.
+                // Nå fjerner vi disse linjene, slik at de forblir 'nil' inntil du faktisk redigerer dem.
+                
+                /* Slettet kode:
+                loggedExercise.originalDuration = segment.durationSeconds
+                loggedExercise.originalReps = segment.targetReps
+                loggedExercise.originalWeight = segment.weight
+                loggedExercise.originalDistance = segment.distance
+                */
+                
+                log.exercises.append(loggedExercise)
+            }
+            
+            // 3. Lagre til databasen
+            modelContext.insert(log)
+            try? modelContext.save()
+            
+            // 4. Vis bekreftelse
+            showLogConfirmation = true
         }
-        
-        // 3. Lagre til databasen
-        modelContext.insert(log)
-        try? modelContext.save()
-        
-        // 4. Vis bekreftelse
-        showLogConfirmation = true
-    }
     
     private func closeAllPanels() {
         withAnimation(.snappy) {
