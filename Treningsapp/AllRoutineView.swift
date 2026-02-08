@@ -1,119 +1,134 @@
-//
-//  AllRoutineView.swift
-//  Treningsapp
-//
-//  Created by Frode Halrynjo on 08/02/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 struct AllRoutinesView: View {
     @Environment(\.modelContext) private var modelContext
     
-    // Vi henter ALLE økter i én sortert liste
+    // Sortert liste over alle økter
     @Query(sort: \CircuitRoutine.sortIndex, order: .forward) private var routines: [CircuitRoutine]
     
-    // Vi må vite hvor grensen går (f.eks. 4, 5 eller 6)
     @AppStorage("numberOfRecentCards") private var numberOfRecentCards: Int = 6
     
+    // NYTT: En 'closure' som kalles når brukeren velger en økt fra skuffen
+    var onSelect: ((CircuitRoutine) -> Void)? = nil
+    
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground).ignoresSafeArea()
+        VStack(spacing: 0) {
+            // Info-header
+            HStack {
+                Image(systemName: "info.circle")
+                Text("Dra øktene opp eller ned for å endre rekkefølge. De \(numberOfRecentCards) øverste vises på forsiden.")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(.secondary)
+            .padding()
+            .background(Color(.systemGroupedBackground))
             
-            VStack(spacing: 0) {
-                // Info-header
-                HStack {
-                    Image(systemName: "info.circle")
-                    Text("Dra øktene opp eller ned for å endre rekkefølge. De \(numberOfRecentCards) øverste vises på forsiden.")
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding()
-                .background(Color(.systemGroupedBackground))
-                
-                List {
-                    // VIKTIG: Alt må ligge i én ForEach for at man skal kunne dra mellom "kategoriene"
-                    ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
-                        NavigationLink(destination: CircuitDetailView(routine: routine)) {
-                            HStack {
-                                // 1. VISUELL INDIKATOR (Grønn hvis på forsiden, Grå hvis ikke)
-                                if index < numberOfRecentCards {
-                                    Image(systemName: "star.fill")
-                                        .foregroundStyle(.orange)
-                                        .font(.caption)
-                                    Text("\(index + 1)")
-                                        .font(.caption)
-                                        .bold()
-                                        .foregroundStyle(.white)
-                                        .frame(width: 24, height: 24)
-                                        .background(Circle().fill(Color.green))
-                                } else {
-                                    Text("\(index + 1)")
-                                        .font(.caption)
-                                        .foregroundStyle(.white)
-                                        .frame(width: 24, height: 24)
-                                        .background(Circle().fill(Color.gray))
-                                }
-                                
-                                // 2. NAVN OG INFO
-                                VStack(alignment: .leading) {
-                                    Text(routine.name)
-                                        .font(.headline)
-                                        .foregroundStyle(index < numberOfRecentCards ? .primary : .secondary)
-                                    
-                                    Text("\(routine.segments.count) øvelser")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                // 3. EKSTRA TEKST SOM FORKLARER STATUS
-                                if index < numberOfRecentCards {
-                                    Text("På forsiden")
-                                        .font(.caption2)
-                                        .foregroundStyle(.green)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.green.opacity(0.1))
-                                        .cornerRadius(4)
-                                }
+            List {
+                ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
+                    // VIKTIG: Vi bruker en hjelpe-view for å velge mellom NavigationLink eller Button
+                    RowContent(
+                        routine: routine,
+                        index: index,
+                        limit: numberOfRecentCards,
+                        action: {
+                            // Hvis onSelect finnes (vi er i skuffen), kjør den.
+                            if let onSelect = onSelect {
+                                onSelect(routine)
                             }
-                            .padding(.vertical, 4)
                         }
-                        // Litt annen bakgrunn på de som er "aktive" for å skille dem ut
-                        .listRowBackground(
-                            index < numberOfRecentCards ? Color.white : Color(.systemGray6).opacity(0.5)
-                        )
-                    }
-                    .onMove(perform: moveRoutine)
-                    .onDelete(perform: deleteRoutine)
+                    )
+                    // Hvis vi IKKE er i skuffen (onSelect er nil), bruk NavigationLink-oppførsel
+                    .background(
+                        Group {
+                            if onSelect == nil {
+                                NavigationLink("", destination: CircuitDetailView(routine: routine))
+                                    .opacity(0)
+                            }
+                        }
+                    )
+                    .listRowBackground(
+                        index < numberOfRecentCards ? Color.white : Color(.systemGray6).opacity(0.5)
+                    )
                 }
-                .listStyle(.insetGrouped)
+                .onMove(perform: moveRoutine)
+                .onDelete(perform: deleteRoutine)
             }
-            .navigationTitle("Alle økter")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden) // Lar skuffens bakgrunn synes
+        }
+        .background(Color(.systemGroupedBackground))
+        // Fjernet NavigationTitle herfra for å passe bedre i skuffen
+    }
+    
+    // --- HJELPEVIEW FOR RADEN ---
+    struct RowContent: View {
+        let routine: CircuitRoutine
+        let index: Int
+        let limit: Int
+        let action: () -> Void
+        
+        var body: some View {
+            Button(action: action) {
+                HStack {
+                    // 1. VISUELL INDIKATOR
+                    if index < limit {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                        Text("\(index + 1)")
+                            .font(.caption)
+                            .bold()
+                            .foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.green))
+                    } else {
+                        Text("\(index + 1)")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.gray))
+                    }
+                    
+                    // 2. NAVN OG INFO
+                    VStack(alignment: .leading) {
+                        Text(routine.name)
+                            .font(.headline)
+                            .foregroundStyle(index < limit ? .primary : .secondary)
+                        
+                        Text("\(routine.segments.count) øvelser")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // 3. STATUS
+                    if index < limit {
+                        Text("På forsiden")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle()) // Gjør hele raden trykkbar
             }
+            .buttonStyle(PlainButtonStyle())
         }
     }
     
     // --- LOGIKK FOR FLYTTING ---
-    
     func moveRoutine(from source: IndexSet, to destination: Int) {
-        // 1. Utfør flyttingen i arrayet (i minnet)
         var updatedRoutines = routines
         updatedRoutines.move(fromOffsets: source, toOffset: destination)
-        
-        // 2. Oppdater sortIndex for ALLE elementene basert på ny rekkefølge
-        // Dette gjør at "grensen" for forsiden automatisk gjelder de nye som havner på topp
         for (index, routine) in updatedRoutines.enumerated() {
             routine.sortIndex = index
         }
-        
-        // 3. Lagre endringen permanent
         try? modelContext.save()
     }
     

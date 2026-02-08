@@ -365,7 +365,7 @@ struct DrawerView<Content: View>: View {
         VStack {
             if edge == .bottom { Spacer() }
             content
-                .background(theme.drawerBackgroundColor)
+                .background(theme.drawerBackground)
                 .clipShape(RoundedRectangle(cornerRadius: theme.drawerCornerRadius))
                 .shadow(color: theme.drawerShadowColor, radius: 20, x: 0, y: edge == .top ? 10 : -10)
                 .padding(.horizontal, 16)

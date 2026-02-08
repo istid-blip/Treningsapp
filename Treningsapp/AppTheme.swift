@@ -1,9 +1,3 @@
-//
-//  AppTheme.swift
-//  Treningsapp
-//
-//  Created by Frode Halrynjo on 06/02/2026.
-//
 import SwiftUI
 
 struct AppTheme {
@@ -15,12 +9,14 @@ struct AppTheme {
     
     // Generelle farger
     let textColor: Color
-    let backgroundColor: Color // Hvis du vil ha tema på bakgrunnen også
+    let backgroundColor: Color
     
-    let drawerBackgroundColor: Color
-        let drawerHeaderColor: Color // Fargen på "tittellinjen" i skuffen
-        let drawerCornerRadius: CGFloat
-        let drawerShadowColor: Color
+    // ENDRET: Fra 'Color' til 'AnyShapeStyle' for å støtte både farger og glass-effekt
+    let drawerBackground: AnyShapeStyle
+    
+    let drawerHeaderColor: Color
+    let drawerCornerRadius: CGFloat
+    let drawerShadowColor: Color
     
     
     // Funksjon for å hente farge basert på kategori
@@ -34,10 +30,9 @@ struct AppTheme {
             case .other: return .gray
             }
         case "Dark Mode":
-            // Eksempel på et annet fargekart
             switch category {
-            case .strength: return Color(.blue) // En mørkere blå
-            case .cardio: return Color(.red)   // En mørkere rød
+            case .strength: return Color(.blue)
+            case .cardio: return Color(.red)
             case .combined: return .indigo
             case .other: return .gray.opacity(0.5)
             }
@@ -47,7 +42,6 @@ struct AppTheme {
     }
 }
 
-// Her lager vi ferdige temaer som vi kan bruke
 extension AppTheme {
     static let standard = AppTheme(
         name: "Standard",
@@ -55,7 +49,10 @@ extension AppTheme {
         arrowColor: .gray.opacity(0.6),
         textColor: .primary,
         backgroundColor: Color(.systemBackground),
-        drawerBackgroundColor: Color(.systemGroupedBackground),
+        
+        // HER: Vi bruker AnyShapeStyle(.regularMaterial) for glass-effekt
+        drawerBackground: AnyShapeStyle(.regularMaterial),
+        
         drawerHeaderColor: Color(.systemGray6),
         drawerCornerRadius: 24,
         drawerShadowColor: Color.primary.opacity(0.1)
@@ -63,14 +60,16 @@ extension AppTheme {
     
     static let minimal = AppTheme(
         name: "Minimal",
-        arrowIcon: "chevron.right", // En tynnere pil
+        arrowIcon: "chevron.right",
         arrowColor: .primary,
         textColor: .primary,
         backgroundColor: Color(.systemGray6),
         
-        drawerBackgroundColor: Color(.systemGray6),
+        // Her bruker vi en vanlig farge, men pakket inn i AnyShapeStyle
+        drawerBackground: AnyShapeStyle(Color(.systemGray6)),
+        
         drawerHeaderColor: Color(.systemGray5),
-        drawerCornerRadius: 16, // Litt skarpere hjørner
+        drawerCornerRadius: 16,
         drawerShadowColor: Color.primary.opacity(0.1)
     )
 }
