@@ -90,57 +90,54 @@ struct AddSegmentView: View {
                         }
                     }
                     
-                    // 3. SMARTE INNDATAFELT
-                    VStack(spacing: 16) {
-                        
-                        if showReps {
-                            SmartInputRow(
-                                title: "Antall Reps",
-                                valueString: "\(targetReps)",
-                                icon: "arrow.counterclockwise",
-                                action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
-                            )
-                        }
-                        
-                        if showWeight {
-                            SmartInputRow(
-                                title: "Belastning (kg)",
-                                valueString: weight == 0 ? "-" : String(format: "%.0f kg", weight),
-                                icon: "scalemass",
-                                action: {
-                                    let weightBinding = Binding<Int>(
-                                        get: { Int(weight) },
-                                        set: { weight = Double($0); updateSegment() }
-                                    )
-                                    onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
-                                }
-                            )
-                        }
-                        
-                        if showTime {
-                            SmartInputRow(
-                                title: "Varighet",
-                                valueString: "\(duration) sek",
-                                icon: "clock",
-                                action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
-                            )
-                        }
-                        
-                        if showDistance {
-                            SmartInputRow(
-                                title: "Distanse (meter)",
-                                valueString: distance == 0 ? "-" : String(format: "%.0f m", distance),
-                                icon: "figure.run",
-                                action: {
-                                    let distBinding = Binding<Int>(
-                                        get: { Int(distance) },
-                                        set: { distance = Double($0); updateSegment() }
-                                    )
-                                    onRequestPicker("Meter", distBinding, 0...10000, 50)
-                                }
-                            )
-                        }
-                    }
+                    // 3. SMARTE INNDATAFELT (Oppdatert: Alt på én linje)
+                                        HStack(spacing: 12) {
+                                            
+                                            if showReps {
+                                                CompactInputCell(
+                                                    value: "\(targetReps)",
+                                                    label: "Reps",
+                                                    action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
+                                                )
+                                            }
+                                            
+                                            if showWeight {
+                                                CompactInputCell(
+                                                    value: weight == 0 ? "-" : String(format: "%.0f", weight),
+                                                    label: "kg",
+                                                    action: {
+                                                        let weightBinding = Binding<Int>(
+                                                            get: { Int(weight) },
+                                                            set: { weight = Double($0); updateSegment() }
+                                                        )
+                                                        onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+                                                    }
+                                                )
+                                            }
+                                            
+                                            if showTime {
+                                                CompactInputCell(
+                                                    value: "\(duration)",
+                                                    label: "Sek",
+                                                    action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
+                                                )
+                                            }
+                                            
+                                            if showDistance {
+                                                CompactInputCell(
+                                                    value: distance == 0 ? "-" : String(format: "%.0f", distance),
+                                                    label: "Meter",
+                                                    action: {
+                                                        let distBinding = Binding<Int>(
+                                                            get: { Int(distance) },
+                                                            set: { distance = Double($0); updateSegment() }
+                                                        )
+                                                        onRequestPicker("Meter", distBinding, 0...10000, 50)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                        .padding(.horizontal) // Sørger for luft ut mot kanten av skjermen
                     
                     // 4. NOTATER
                     VStack(alignment: .leading, spacing: 8) {
@@ -236,30 +233,35 @@ struct AddSegmentView: View {
     }
 }
 
-struct SmartInputRow: View {
-    let title: String
-    let valueString: String
-    let icon: String
+struct CompactInputCell: View {
+    let value: String
+    let label: String
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack {
+            VStack(spacing: 6) {
+                // Selve inndataboksen
                 ZStack {
-                    Circle().fill(Color.blue.opacity(0.1)).frame(width: 32, height: 32)
-                    Image(systemName: icon).font(.caption).foregroundStyle(Color.blue)
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.secondarySystemGroupedBackground)) // Sikrer korrekt farge i nattmodus
+                        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+                    
+                    Text(value)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.primary)
+                        .padding(.vertical, 16) // Gir god trykkflate og luft
                 }
                 
-                Text(title).foregroundStyle(Color.primary)
-                Spacer()
-                HStack(spacing: 4) {
-                    Text(valueString).font(.title3).bold().foregroundStyle(Color.primary)
-                    Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 8).background(Color(.systemGray6)).cornerRadius(8)
+                // Benevning under boksen
+                Text(label)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
             }
-            .padding(12).background(Color(.secondarySystemGroupedBackground)).cornerRadius(12).shadow(color: .black.opacity(0.03), radius: 5)
         }
+        .buttonStyle(ScaleButtonStyle()) // Gir fin trykke-effekt
+        .frame(maxWidth: .infinity) // Tvinger feltene til å dele plassen likt
     }
 }
-
