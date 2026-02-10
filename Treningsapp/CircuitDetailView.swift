@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import UIKit
 
 // UI States
 enum DrawerState: Identifiable {
@@ -454,30 +455,24 @@ struct VerticalRuler: View {
     @State private var dragOffset: CGFloat = 0
     @State private var initialDragValue: Int? = nil
     
+    // Feedback generator
+    let feedbackGenerator = UISelectionFeedbackGenerator()
+    
     var body: some View {
         GeometryReader { geometry in
             let midY = geometry.size.height / 2
             let centerX = geometry.size.width / 2
             
             ZStack {
-                // Usynlig bakgrunn for å fange opp trykk
-                Color.black.opacity(0.001)
-                    .contentShape(Rectangle())
+                Color.black.opacity(0.001).contentShape(Rectangle())
                 
-                // --- LINJENE ---
                 let numLinesHalf = Int(ceil(rulerHeight / itemHeight / 2)) + 1
                 
                 ForEach(-numLinesHalf...numLinesHalf, id: \.self) { i in
                     let num = value + (i * step)
-                    
                     if range.contains(num) {
-                        // Posisjon: Midten + indeks-offset + drag-forskyvning
                         let lineY = midY + CGFloat(i) * itemHeight + dragOffset
-                        
-                        // Sjekk om linjen er en hovedstrek
                         let isMajor = num % (step * 5) == 0
-                        
-                        // Fade ut linjene i topp og bunn
                         let dist = abs(lineY - midY)
                         let opacity = max(0, 1 - (dist / (rulerHeight / 2)))
                         
@@ -491,7 +486,6 @@ struct VerticalRuler: View {
                     }
                 }
                 
-                // --- MARKØR (Fast i midten) ---
                 Rectangle()
                     .fill(Color.blue)
                     .frame(width: 110, height: 4)
@@ -499,57 +493,51 @@ struct VerticalRuler: View {
                     .position(x: centerX, y: midY)
                     .allowsHitTesting(false)
             }
-            // --- LOGIKK MED AKSELERASJON ---
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
                         if initialDragValue == nil {
                             initialDragValue = value
+                            feedbackGenerator.prepare() // Gjør klar haptics
                         }
                         
-                        // 1. Hent faktisk bevegelse
                         let rawTranslation = gesture.translation.height
-                        
-                        // 2. Beregn "Boost"-faktor basert på avstand
-                        // Jo lengre unna startpunktet fingeren er, jo raskere går det.
-                        // 200.0 er "følsomheten". Lavere tall = raskere akselerasjon.
                         let magnitude = abs(rawTranslation)
                         let boostFactor = 1.0 + (magnitude / 200.0)
-                        
-                        // 3. Beregn effektiv bevegelse (Akselerert)
                         let effectiveTranslation = rawTranslation * boostFactor
                         
-                        // 4. Oppdater verdiene
-                        // Negativ fordi å dra NED (positiv Y) skal gi LAVERE tall (hvis man tenker linjalen ruller ned)
-                        // Eller: Dra OPP (negativ Y) -> Øker tallet.
                         let steps = -Int(effectiveTranslation / itemHeight)
                         let remainder = effectiveTranslation.truncatingRemainder(dividingBy: itemHeight)
                         
                         if let startVal = initialDragValue {
                             let calculatedValue = startVal + (steps * step)
+                            var newValue = value
                             
-                            // Clamp (hold innenfor range)
                             if calculatedValue < range.lowerBound {
-                                value = range.lowerBound
-                                dragOffset = remainder / 3 // Motstand
+                                newValue = range.lowerBound
+                                dragOffset = remainder / 3
                             } else if calculatedValue > range.upperBound {
-                                value = range.upperBound
+                                newValue = range.upperBound
                                 dragOffset = remainder / 3
                             } else {
-                                value = calculatedValue
+                                newValue = calculatedValue
                                 dragOffset = remainder
+                            }
+                            
+                            // VIKTIG: Sjekk om verdien faktisk endres før vi oppdaterer bindingen
+                            if newValue != value {
+                                feedbackGenerator.selectionChanged() // <--- PANG! Direkte feedback
+                                value = newValue
                             }
                         }
                     }
                     .onEnded { _ in
                         initialDragValue = nil
-                        // Smekk tilbake til senter
                         withAnimation(.snappy(duration: 0.15)) {
                             dragOffset = 0
                         }
                     }
             )
-            .sensoryFeedback(.selection, trigger: value)
         }
         .frame(height: rulerHeight)
         .clipped()

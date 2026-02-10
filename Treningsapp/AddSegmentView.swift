@@ -55,12 +55,11 @@ struct AddSegmentView: View {
                             }
                     }
                     
-                    // 2. KATEGORI (ENDRET: Ingen scrolling)
+                    // 2. KATEGORI
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Kategori")
                             .font(.caption).foregroundStyle(.secondary)
                         
-                        // HER ER ENDRINGEN: Fjernet ScrollView, lagt til maxWidth på knappene
                         HStack(spacing: 8) {
                             ForEach(ExerciseCategory.allCases, id: \.self) { category in
                                 Button(action: {
@@ -73,10 +72,10 @@ struct AddSegmentView: View {
                                     Text(category.rawValue)
                                         .font(.caption)
                                         .fontWeight(.semibold)
-                                        .lineLimit(1) // Sikrer at tekst holder seg på én linje
-                                        .minimumScaleFactor(0.8) // Krymper teksten litt hvis det blir trangt
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
                                         .padding(.vertical, 12)
-                                        .frame(maxWidth: .infinity) // VIKTIG: Deler plassen likt
+                                        .frame(maxWidth: .infinity)
                                         .background(
                                             selectedCategory == category
                                             ? AppTheme.standard.color(for: category)
@@ -90,54 +89,54 @@ struct AddSegmentView: View {
                         }
                     }
                     
-                    // 3. SMARTE INNDATAFELT (Oppdatert: Alt på én linje)
-                                        HStack(spacing: 12) {
-                                            
-                                            if showReps {
-                                                CompactInputCell(
-                                                    value: "\(targetReps)",
-                                                    label: "Reps",
-                                                    action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
-                                                )
-                                            }
-                                            
-                                            if showWeight {
-                                                CompactInputCell(
-                                                    value: weight == 0 ? "-" : String(format: "%.0f", weight),
-                                                    label: "kg",
-                                                    action: {
-                                                        let weightBinding = Binding<Int>(
-                                                            get: { Int(weight) },
-                                                            set: { weight = Double($0); updateSegment() }
-                                                        )
-                                                        onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
-                                                    }
-                                                )
-                                            }
-                                            
-                                            if showTime {
-                                                CompactInputCell(
-                                                    value: "\(duration)",
-                                                    label: "Sek",
-                                                    action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
-                                                )
-                                            }
-                                            
-                                            if showDistance {
-                                                CompactInputCell(
-                                                    value: distance == 0 ? "-" : String(format: "%.0f", distance),
-                                                    label: "Meter",
-                                                    action: {
-                                                        let distBinding = Binding<Int>(
-                                                            get: { Int(distance) },
-                                                            set: { distance = Double($0); updateSegment() }
-                                                        )
-                                                        onRequestPicker("Meter", distBinding, 0...10000, 50)
-                                                    }
-                                                )
-                                            }
-                                        }
-                                        .padding(.horizontal) // Sørger for luft ut mot kanten av skjermen
+                    // 3. SMARTE INNDATAFELT
+                    HStack(spacing: 12) {
+                        
+                        if showReps {
+                            CompactInputCell(
+                                value: "\(targetReps)",
+                                label: "Reps",
+                                action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
+                            )
+                        }
+                        
+                        if showWeight {
+                            CompactInputCell(
+                                value: weight == 0 ? "-" : String(format: "%.0f", weight),
+                                label: "kg",
+                                action: {
+                                    let weightBinding = Binding<Int>(
+                                        get: { Int(weight) },
+                                        set: { weight = Double($0) }
+                                    )
+                                    onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+                                }
+                            )
+                        }
+                        
+                        if showTime {
+                            CompactInputCell(
+                                value: "\(duration)",
+                                label: "Sek",
+                                action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
+                            )
+                        }
+                        
+                        if showDistance {
+                            CompactInputCell(
+                                value: distance == 0 ? "-" : String(format: "%.0f", distance),
+                                label: "Meter",
+                                action: {
+                                    let distBinding = Binding<Int>(
+                                        get: { Int(distance) },
+                                        set: { distance = Double($0) }
+                                    )
+                                    onRequestPicker("Meter", distBinding, 0...10000, 50)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
                     
                     // 4. NOTATER
                     VStack(alignment: .leading, spacing: 8) {
@@ -187,8 +186,12 @@ struct AddSegmentView: View {
                 distance = segment.distance
             }
         }
+        // VIKTIG: Vi har lagt tilbake .onChange slik at LogDetailView fanger opp endringene
+        // Siden VerticalRuler nå fikser haptics selv, er dette trygt igjen.
         .onChange(of: duration) { _, _ in updateSegment() }
         .onChange(of: targetReps) { _, _ in updateSegment() }
+        .onChange(of: weight) { _, _ in updateSegment() }
+        .onChange(of: distance) { _, _ in updateSegment() }
         
         .alert("Slett?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) { }
@@ -214,13 +217,17 @@ struct AddSegmentView: View {
     
     func updateSegment() {
         guard let segment = segmentToEdit else { return }
-        segment.name = name
-        segment.category = selectedCategory
-        segment.note = note
-        segment.durationSeconds = duration
-        segment.targetReps = targetReps
-        segment.weight = weight
-        segment.distance = distance
+        
+        // Oppdaterer objektet direkte.
+        // I LogDetailView er dette et midlertidig objekt (raskt).
+        // I CircuitDetailView er dette databasen (litt tregere, men Ruleren håndterer det nå).
+        if segment.name != name { segment.name = name }
+        if segment.category != selectedCategory { segment.category = selectedCategory }
+        if segment.note != note { segment.note = note }
+        if segment.durationSeconds != duration { segment.durationSeconds = duration }
+        if segment.targetReps != targetReps { segment.targetReps = targetReps }
+        if segment.weight != weight { segment.weight = weight }
+        if segment.distance != distance { segment.distance = distance }
     }
     
     func deleteSegment() {
@@ -244,14 +251,14 @@ struct CompactInputCell: View {
                 // Selve inndataboksen
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.secondarySystemGroupedBackground)) // Sikrer korrekt farge i nattmodus
+                        .fill(Color(.secondarySystemGroupedBackground))
                         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
                     
                     Text(value)
                         .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundStyle(Color.primary)
-                        .padding(.vertical, 16) // Gir god trykkflate og luft
+                        .padding(.vertical, 16)
                 }
                 
                 // Benevning under boksen
@@ -261,7 +268,7 @@ struct CompactInputCell: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .buttonStyle(ScaleButtonStyle()) // Gir fin trykke-effekt
-        .frame(maxWidth: .infinity) // Tvinger feltene til å dele plassen likt
+        .buttonStyle(ScaleButtonStyle())
+        .frame(maxWidth: .infinity)
     }
 }

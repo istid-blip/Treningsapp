@@ -141,21 +141,23 @@ struct LogDetailView: View {
                     .ignoresSafeArea(.all, edges: .top)
                 }
                 
-                // --- PICKER ---
-                if let pickerState = activePicker {
-                    DrawerView(theme: theme, edge: .bottom, maxHeight: pickerHeight) {
-                        VStack(spacing: 15) {
-                            Text(pickerState.title).font(.headline).padding(.top, 10)
-                            Picker("", selection: pickerState.binding) {
-                                ForEach(Array(stride(from: pickerState.range.lowerBound, through: pickerState.range.upperBound, by: pickerState.step)), id: \.self) { value in
-                                    Text("\(value)").tag(value)
+                // --- PICKER (Oppdatert til VerticalRuler) ---
+                                if let pickerState = activePicker {
+                                    DrawerView(theme: theme, edge: .bottom, maxHeight: pickerHeight) {
+                                        VStack(spacing: 0) {
+                                            // Vi fjerner tekst-headeren og bruker linjalen i stedet
+                                            
+                                            VerticalRuler(
+                                                value: pickerState.binding,
+                                                range: pickerState.range,
+                                                step: pickerState.step
+                                            )
+                                            
+                                            Spacer()
+                                        }
+                                    }
+                                    .zIndex(12)
                                 }
-                            }.pickerStyle(.wheel).frame(height: 150)
-                            Button("Ferdig") { withAnimation(.snappy) { activePicker = nil } }
-                                .padding().background(Color.blue).foregroundStyle(.white).cornerRadius(12)
-                        }
-                    }.zIndex(12)
-                }
             }
         }
         .navigationBarHidden(true)
@@ -164,30 +166,28 @@ struct LogDetailView: View {
     // --- NY LOGIKK FOR LAGRING AV ENDRINGER ---
     
     func commitTempChanges(from tempSegment: CircuitExercise) {
-        guard let exercise = editingLogExercise else { return }
-        
-        if tempSegment.isDeleted {
-            // modelContext.delete(exercise) // Valgfritt
-            return
+            guard let exercise = editingLogExercise else { return }
+            
+            if tempSegment.isDeleted {
+                return
+            }
+
+            // Bruk hjelpefunksjonen på alle feltene
+            updateLogValue(&exercise.durationSeconds, &exercise.originalDuration, tempSegment.durationSeconds)
+            updateLogValue(&exercise.targetReps, &exercise.originalReps, tempSegment.targetReps)
+            updateLogValue(&exercise.weight, &exercise.originalWeight, tempSegment.weight)
+            updateLogValue(&exercise.distance, &exercise.originalDistance, tempSegment.distance)
+
+            // Oppdater tekst-feltene direkte
+            exercise.name = tempSegment.name
+            exercise.categoryRawValue = tempSegment.category.rawValue
+            exercise.note = tempSegment.note
+            
+            // OPPDATERT: Vi setter kun wasEdited. editCount oppdateres automatisk av modellen.
+            log.wasEdited = log.exercises.contains { $0.hasChanges }
+            
+            try? modelContext.save()
         }
-
-        // Bruk hjelpefunksjonen på alle feltene
-        updateLogValue(&exercise.durationSeconds, &exercise.originalDuration, tempSegment.durationSeconds)
-        updateLogValue(&exercise.targetReps, &exercise.originalReps, tempSegment.targetReps)
-        updateLogValue(&exercise.weight, &exercise.originalWeight, tempSegment.weight)
-        updateLogValue(&exercise.distance, &exercise.originalDistance, tempSegment.distance)
-
-        // Oppdater tekst-feltene direkte (trenger ikke historikk på navn/kategori/notat)
-        exercise.name = tempSegment.name
-        exercise.categoryRawValue = tempSegment.category.rawValue
-        exercise.note = tempSegment.note
-        
-        // VIKTIG: Sjekk om loggen faktisk har endringer igjen
-        // Hvis brukeren har rettet alt tilbake til originalt, skal ikke loggen være markert som "Edited" lenger.
-        log.wasEdited = log.exercises.contains { $0.hasChanges }
-        
-        try? modelContext.save()
-    }
     
     func startEditing(_ exercise: LoggedExercise) {
         editingLogExercise = exercise
@@ -234,13 +234,16 @@ struct LogDetailView: View {
     }
     
     func deleteExercise(at offsets: IndexSet) {
-        for index in offsets {
-            let exercise = log.exercises[index]
-            modelContext.delete(exercise)
+            for index in offsets {
+                let exercise = log.exercises[index]
+                modelContext.delete(exercise)
+            }
+            
+            // Sletting regnes som en endring
+            log.wasEdited = true
+            
+            try? modelContext.save()
         }
-        log.wasEdited = true
-        try? modelContext.save()
-    }
     
     func iconName(for category: ExerciseCategory) -> String {
         switch category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
