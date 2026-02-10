@@ -49,7 +49,7 @@ struct AllRoutinesView: View {
                         }
                     )
                     .listRowBackground(
-                        index < numberOfRecentCards ? Color.white : Color(.systemGray6).opacity(0.5)
+                        index < numberOfRecentCards ? Color(.secondarySystemGroupedBackground) : Color(.systemGray6).opacity(0.5)
                     )
                 }
                 .onMove(perform: moveRoutine)

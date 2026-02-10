@@ -41,7 +41,7 @@ struct RunCircuitView: View {
                     .opacity(0.1)
                     .ignoresSafeArea()
             } else {
-                Color.white.ignoresSafeArea()
+                Color(.systemBackground).ignoresSafeArea()
             }
             
             if isWorkoutComplete {
@@ -141,7 +141,7 @@ struct RunCircuitView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding()
-                        .background(Color.white)
+                        .background(Color(.secondarySystemGroupedBackground))
                         .cornerRadius(12)
                         .shadow(color: .black.opacity(0.05), radius: 5)
                         .padding(.horizontal)

@@ -258,7 +258,7 @@ struct SmartInputRow: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8).background(Color(.systemGray6)).cornerRadius(8)
             }
-            .padding(12).background(Color.white).cornerRadius(12).shadow(color: .black.opacity(0.03), radius: 5)
+            .padding(12).background(Color(.secondarySystemGroupedBackground)).cornerRadius(12).shadow(color: .black.opacity(0.03), radius: 5)
         }
     }
 }

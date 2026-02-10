@@ -70,6 +70,6 @@ extension AppTheme {
         
         drawerHeaderColor: Color(.systemGray5),
         drawerCornerRadius: 16,
-        drawerShadowColor: Color.primary.opacity(0.1)
+        drawerShadowColor: Color.black.opacity(0.1)
     )
 }
