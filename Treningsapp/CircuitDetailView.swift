@@ -185,11 +185,6 @@ struct CircuitDetailView: View {
                                 if let pickerState = activePicker {
                                     DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
                                         VStack(spacing: 0) {
-                                            Text(pickerState.title)
-                                                .font(.headline)
-                                                .foregroundStyle(.secondary)
-                                                .padding(.top, 30)
-                                                .padding(.bottom, 10)
                                             
                                             // Den nye linjalen
                                             VerticalRuler(
@@ -451,54 +446,112 @@ struct VerticalRuler: View {
     let range: ClosedRange<Int>
     let step: Int
     
+    // Konstanter for utseende
+    private let itemHeight: CGFloat = 40
+    private let rulerHeight: CGFloat = 250
+    
+    // Tilstand for bevegelse
+    @State private var dragOffset: CGFloat = 0
+    @State private var initialDragValue: Int? = nil
+    
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                // Luft over første tall (halvparten av ruler-høyden)
-                Spacer().frame(height: 125)
+        GeometryReader { geometry in
+            let midY = geometry.size.height / 2
+            let centerX = geometry.size.width / 2
+            
+            ZStack {
+                // Usynlig bakgrunn for å fange opp trykk
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
                 
-                ForEach(Array(stride(from: range.lowerBound, through: range.upperBound, by: step)), id: \.self) { num in
-                    HStack {
-                        // Tallet (vises litt større når det er valgt)
-                        Text("\(num)")
-                            .font(.system(size: num == value ? 28 : 18, weight: num == value ? .bold : .regular, design: .rounded))
-                            .foregroundStyle(num == value ? Color.blue : Color.gray.opacity(0.5))
-                            .frame(width: 60, alignment: .trailing)
-                            .scaleEffect(num == value ? 1.1 : 1.0)
-                            .animation(.snappy(duration: 0.2), value: value)
+                // --- LINJENE ---
+                let numLinesHalf = Int(ceil(rulerHeight / itemHeight / 2)) + 1
+                
+                ForEach(-numLinesHalf...numLinesHalf, id: \.self) { i in
+                    let num = value + (i * step)
+                    
+                    if range.contains(num) {
+                        // Posisjon: Midten + indeks-offset + drag-forskyvning
+                        let lineY = midY + CGFloat(i) * itemHeight + dragOffset
                         
-                        // Streken (Linjal-merket)
-                        Rectangle()
-                            .fill(num == value ? Color.blue : Color.gray.opacity(0.3))
-                            .frame(width: num == value ? 60 : 30, height: 2)
-                            .cornerRadius(1)
-                    }
-                    .frame(height: 50) // Avstand mellom hvert trinn
-                    .id(num) // Viktig for scroll-snapping
-                    .onTapGesture {
-                        withAnimation(.snappy) { value = num }
+                        // Sjekk om linjen er en hovedstrek
+                        let isMajor = num % (step * 5) == 0
+                        
+                        // Fade ut linjene i topp og bunn
+                        let dist = abs(lineY - midY)
+                        let opacity = max(0, 1 - (dist / (rulerHeight / 2)))
+                        
+                        if opacity > 0 {
+                            Rectangle()
+                                .fill(Color.gray.opacity(isMajor ? 0.5 : 0.3))
+                                .frame(width: isMajor ? 80 : 40, height: 2)
+                                .position(x: centerX, y: lineY)
+                                .opacity(opacity)
+                        }
                     }
                 }
                 
-                // Luft under siste tall
-                Spacer().frame(height: 125)
+                // --- MARKØR (Fast i midten) ---
+                Rectangle()
+                    .fill(Color.blue)
+                    .frame(width: 110, height: 4)
+                    .cornerRadius(2)
+                    .position(x: centerX, y: midY)
+                    .allowsHitTesting(false)
             }
-            .scrollTargetLayout()
+            // --- LOGIKK MED AKSELERASJON ---
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        if initialDragValue == nil {
+                            initialDragValue = value
+                        }
+                        
+                        // 1. Hent faktisk bevegelse
+                        let rawTranslation = gesture.translation.height
+                        
+                        // 2. Beregn "Boost"-faktor basert på avstand
+                        // Jo lengre unna startpunktet fingeren er, jo raskere går det.
+                        // 200.0 er "følsomheten". Lavere tall = raskere akselerasjon.
+                        let magnitude = abs(rawTranslation)
+                        let boostFactor = 1.0 + (magnitude / 200.0)
+                        
+                        // 3. Beregn effektiv bevegelse (Akselerert)
+                        let effectiveTranslation = rawTranslation * boostFactor
+                        
+                        // 4. Oppdater verdiene
+                        // Negativ fordi å dra NED (positiv Y) skal gi LAVERE tall (hvis man tenker linjalen ruller ned)
+                        // Eller: Dra OPP (negativ Y) -> Øker tallet.
+                        let steps = -Int(effectiveTranslation / itemHeight)
+                        let remainder = effectiveTranslation.truncatingRemainder(dividingBy: itemHeight)
+                        
+                        if let startVal = initialDragValue {
+                            let calculatedValue = startVal + (steps * step)
+                            
+                            // Clamp (hold innenfor range)
+                            if calculatedValue < range.lowerBound {
+                                value = range.lowerBound
+                                dragOffset = remainder / 3 // Motstand
+                            } else if calculatedValue > range.upperBound {
+                                value = range.upperBound
+                                dragOffset = remainder / 3
+                            } else {
+                                value = calculatedValue
+                                dragOffset = remainder
+                            }
+                        }
+                    }
+                    .onEnded { _ in
+                        initialDragValue = nil
+                        // Smekk tilbake til senter
+                        withAnimation(.snappy(duration: 0.15)) {
+                            dragOffset = 0
+                        }
+                    }
+            )
+            .sensoryFeedback(.selection, trigger: value)
         }
-        // Magien som binder scroll til verdien:
-        .scrollPosition(id: Binding(get: { value }, set: { if let v = $0 { value = v } }))
-        .scrollTargetBehavior(.viewAligned)
-        .frame(height: 250)
-        .overlay(
-            // En fast markør i midten som viser hvor vi peker
-            HStack {
-                Spacer()
-                Image(systemName: "arrowtriangle.left.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.blue)
-                    .offset(x: 10) // Juster pilen litt ut til høyre
-            }
-            .allowsHitTesting(false)
-        )
+        .frame(height: rulerHeight)
+        .clipped()
     }
 }
