@@ -88,8 +88,8 @@ struct CircuitDetailView: View {
                                             isLast: index == uiSegments.count - 1,
                                             theme: currentTheme,
                                             draggingSegment: $draggingSegment,
-                                            onEdit: { activeDrawer = .editSegment(segment) },
-                                            onEditValue: { openPickerFor(segment: segment) }
+                                            onEdit: { activeDrawer = .editSegment(segment) }
+                                          
                                         )
                                         .onDrop(of: [.text], delegate: GridDropDelegate(
                                             item: segment,
@@ -100,14 +100,17 @@ struct CircuitDetailView: View {
                                     }
                                     
                                     // LEGG TIL KNAPP
-                                    HStack(spacing: 8) {
-                                        Button(action: addSegment) {
-                                            TreningsKort(tittel: "Legg til", ikon: "plus", bakgrunnsfarge: Color(.systemGray6), tekstFarge: .blue)
-                                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(style: StrokeStyle(lineWidth: 2, dash: [5])).foregroundStyle(Color.blue.opacity(0.5)))
-                                        }
-                                        .buttonStyle(ScaleButtonStyle())
-                                        .aspectRatio(1.0, contentMode: .fit)
-                                    }
+                                                                        HStack(spacing: 8) {
+                                                                            Button(action: addSegment) {
+                                                                                TreningsKort(tittel: "Legg til", ikon: "plus", bakgrunnsfarge: Color(.systemGray6), tekstFarge: .blue)
+                                                                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(style: StrokeStyle(lineWidth: 2, dash: [5])).foregroundStyle(Color.blue.opacity(0.5)))
+                                                                            }
+                                                                            .buttonStyle(ScaleButtonStyle())
+                                                                            .aspectRatio(1.0, contentMode: .fit)
+                                                                            
+                                                                            // Usynlig boks for å matche bredden til pilen i de andre kortene (20pt)
+                                                                            Color.clear.frame(width: 20)
+                                                                        }
                                 }
                                 .padding(.horizontal)
                                 .padding(.bottom, 120)
@@ -135,6 +138,7 @@ struct CircuitDetailView: View {
                     }
                 }
                 .disabled(activeDrawer != nil || activePicker != nil)
+                .ignoresSafeArea(.keyboard)
                 
                 // --- DIMMING ---
                 if activeDrawer != nil || activePicker != nil {
@@ -159,10 +163,14 @@ struct CircuitDetailView: View {
                                 segmentToEdit: segment,
                                 onDismiss: { closeAllPanels() },
                                 onRequestPicker: { title, binding, range, step in
-                                    withAnimation(.snappy) {
-                                        activePicker = PickerState(title: title, binding: binding, range: range, step: step)
-                                    }
-                                },
+                                                            // 1. Lukk tastaturet hvis det er åpent
+                                                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                                            
+                                                            // 2. Åpne pickeren (skuffen)
+                                                            withAnimation(.snappy) {
+                                                                activePicker = PickerState(title: title, binding: binding, range: range, step: step)
+                                                            }
+                                                        },
                                 onTyping: {
                                     withAnimation(.snappy) { activePicker = nil }
                                 }
@@ -173,31 +181,28 @@ struct CircuitDetailView: View {
                     .ignoresSafeArea(.all, edges: .top)
                 }
                 
-                // --- PICKER SKUFF ---
-                if let pickerState = activePicker {
-                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                        VStack(spacing: 15) {
-                            Text(pickerState.title)
-                                .font(.headline).padding(.top, 10)
-                            
-                            Picker("", selection: pickerState.binding) {
-                                ForEach(Array(stride(from: pickerState.range.lowerBound, through: pickerState.range.upperBound, by: pickerState.step)), id: \.self) { value in
-                                    Text("\(value)").tag(value)
+                // --- PICKER SKUFF (Ny Vertical Ruler) ---
+                                if let pickerState = activePicker {
+                                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
+                                        VStack(spacing: 0) {
+                                            Text(pickerState.title)
+                                                .font(.headline)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.top, 30)
+                                                .padding(.bottom, 10)
+                                            
+                                            // Den nye linjalen
+                                            VerticalRuler(
+                                                value: pickerState.binding,
+                                                range: pickerState.range,
+                                                step: pickerState.step
+                                            )
+                                            
+                                            Spacer()
+                                        }
+                                    }
+                                    .zIndex(12)
                                 }
-                            }
-                            .pickerStyle(.wheel)
-                            .frame(height: 150)
-                            
-                            Button(action: {
-                                withAnimation(.snappy) { activePicker = nil }
-                            }) {
-                                Text("Ferdig")
-                                    .font(.headline).frame(maxWidth: .infinity).padding().background(Color.blue).foregroundStyle(Color.white).cornerRadius(12)
-                            }
-                        }
-                    }
-                    .zIndex(12)
-                }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -296,11 +301,10 @@ struct DraggableSegmentView: View {
     var theme: AppTheme
     @Binding var draggingSegment: CircuitExercise?
     var onEdit: () -> Void
-    var onEditValue: () -> Void
     
     var body: some View {
         HStack(spacing: 8) {
-            ZStack(alignment: .topTrailing) {
+            
                 TreningsKort(
                     tittel: segment.name,
                     undertittel: segmentDescription(for: segment),
@@ -312,19 +316,6 @@ struct DraggableSegmentView: View {
                 .aspectRatio(1.0, contentMode: .fit)
                 .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
                 .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
-                
-                Button(action: onEditValue) {
-                    ZStack {
-                        Circle().fill(Color.white).shadow(radius: 2)
-                        Text("\(valueToDisplay())")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color.black)
-                    }
-                    .frame(width: 28, height: 28)
-                }
-                .offset(x: 8, y: -8)
-            }
-            .zIndex(1)
             
             Image(systemName: theme.arrowIcon)
                 .font(.title3)
@@ -405,20 +396,109 @@ struct ScaleButtonStyle: ButtonStyle {
 }
 
 func segmentDescription(for segment: CircuitExercise) -> String {
+    var linjer: [String] = []
+    
     switch segment.category {
     case .strength:
-        let weightInfo = segment.weight > 0 ? " @ \(Int(segment.weight))kg" : ""
-        return "\(segment.targetReps) reps\(weightInfo)"
+        // STYRKE: Vis Reps og Vekt
+        if segment.targetReps > 0 {
+            if segment.weight > 0 {
+                linjer.append("\(segment.targetReps) x \(Int(segment.weight)) kg")
+            } else {
+                linjer.append("\(segment.targetReps) reps")
+            }
+        } else if segment.weight > 0 {
+            linjer.append("\(Int(segment.weight)) kg")
+        }
+        
     case .cardio:
-        let distInfo = segment.distance > 0 ? " (\(Int(segment.distance)) m)" : ""
-        return "\(segment.durationSeconds) sek\(distInfo)"
-    case .other:
-        return "\(segment.durationSeconds) sek"
+        // KONDISJON: Vis Tid og Avstand (Ignorer reps/vekt selv om det ligger lagret)
+        if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
+        if segment.distance > 0 { linjer.append("\(Int(segment.distance)) m") }
+        
     case .combined:
-        return "\(segment.targetReps) reps / \(segment.durationSeconds) sek"
+        // KOMBINERT: Vis alt som er satt
+        if segment.targetReps > 0 { linjer.append("\(segment.targetReps) reps") }
+        if segment.weight > 0 { linjer.append("\(Int(segment.weight)) kg") }
+        if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
+        if segment.distance > 0 { linjer.append("\(Int(segment.distance)) m") }
+        
+    case .other:
+        // ANNET: Vis primært tid
+        if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
+    }
+    
+    // Hvis ingen info er satt, vis en bindestrek
+    return linjer.isEmpty ? "-" : linjer.joined(separator: "\n")
+}
+
+// Hjelpefunksjon for tid
+func formatTid(_ sekunder: Int) -> String {
+    if sekunder >= 60 {
+        let min = sekunder / 60
+        let sek = sekunder % 60
+        return String(format: "%d:%02d min", min, sek)
+    } else {
+        return "\(sekunder) sek"
     }
 }
 
 func iconForSegment(_ segment: CircuitExercise) -> String? {
     switch segment.category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
+}
+struct VerticalRuler: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 0) {
+                // Luft over første tall (halvparten av ruler-høyden)
+                Spacer().frame(height: 125)
+                
+                ForEach(Array(stride(from: range.lowerBound, through: range.upperBound, by: step)), id: \.self) { num in
+                    HStack {
+                        // Tallet (vises litt større når det er valgt)
+                        Text("\(num)")
+                            .font(.system(size: num == value ? 28 : 18, weight: num == value ? .bold : .regular, design: .rounded))
+                            .foregroundStyle(num == value ? Color.blue : Color.gray.opacity(0.5))
+                            .frame(width: 60, alignment: .trailing)
+                            .scaleEffect(num == value ? 1.1 : 1.0)
+                            .animation(.snappy(duration: 0.2), value: value)
+                        
+                        // Streken (Linjal-merket)
+                        Rectangle()
+                            .fill(num == value ? Color.blue : Color.gray.opacity(0.3))
+                            .frame(width: num == value ? 60 : 30, height: 2)
+                            .cornerRadius(1)
+                    }
+                    .frame(height: 50) // Avstand mellom hvert trinn
+                    .id(num) // Viktig for scroll-snapping
+                    .onTapGesture {
+                        withAnimation(.snappy) { value = num }
+                    }
+                }
+                
+                // Luft under siste tall
+                Spacer().frame(height: 125)
+            }
+            .scrollTargetLayout()
+        }
+        // Magien som binder scroll til verdien:
+        .scrollPosition(id: Binding(get: { value }, set: { if let v = $0 { value = v } }))
+        .scrollTargetBehavior(.viewAligned)
+        .frame(height: 250)
+        .overlay(
+            // En fast markør i midten som viser hvor vi peker
+            HStack {
+                Spacer()
+                Image(systemName: "arrowtriangle.left.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.blue)
+                    .offset(x: 10) // Juster pilen litt ut til høyre
+            }
+            .allowsHitTesting(false)
+        )
+    }
 }

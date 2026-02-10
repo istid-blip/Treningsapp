@@ -31,34 +31,39 @@ struct TreningsKort: View {
     }
     
     var body: some View {
-        VStack(spacing: 10) {
-            if let ikon = ikon {
-                Image(systemName: ikon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 30, height: 30)
+            VStack(spacing: 8) { // Endret spacing litt
+                if let ikon = ikon {
+                    Image(systemName: ikon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 24, height: 24) // Litt mindre ikon for å gi plass til tekst
+                        .foregroundStyle(tekstFarge)
+                }
+                
+                Text(tittel)
+                    .font(.headline)
                     .foregroundStyle(tekstFarge)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1) // Tittelen får én linje
+                
+                Spacer()
+                
+                if let under = undertittel {
+                    Text(under)
+                        .font(.caption)
+                        .fontWeight(.medium) // Litt tydeligere tekst
+                        .foregroundStyle(tekstFarge.opacity(0.95))
+                        .multilineTextAlignment(.center) // Sentrerer teksten hvis det er flere linjer
+                        .fixedSize(horizontal: false, vertical: true) // Lar teksten bruke plassen den trenger i høyden
+                }
+                
+                Spacer() // Ekstra spacer for å balansere innholdet vertikalt
             }
-            
-            Text(tittel)
-                .font(.headline)
-                .foregroundStyle(tekstFarge)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
-                .lineLimit(2)
-            
-            Spacer()
-            
-            if let under = undertittel {
-                Text(under)
-                    .font(.caption)
-                    .foregroundStyle(tekstFarge.opacity(0.9))
-            }
+            .padding(8) // Litt mindre padding for å utnytte plassen på små kort
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(bakgrunnsfarge)
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.1), radius: 3, x: 0, y: 2)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(bakgrunnsfarge)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 3, x: 0, y: 2)
-    }
 }
