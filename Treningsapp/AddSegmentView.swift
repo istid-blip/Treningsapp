@@ -31,6 +31,11 @@ struct AddSegmentView: View {
     @FocusState private var isNameFocused: Bool
     @FocusState private var isNoteFocused: Bool
     
+    enum ActiveField { case name, note, reps, weight, time, distance }
+    @State private var activeField: ActiveField? = nil
+    
+    
+    
     var body: some View {
         VStack(spacing: 0) {
             
@@ -45,15 +50,28 @@ struct AddSegmentView: View {
                         TextField("F.eks. Pause eller Knebøy", text: $name)
                             .font(.title3)
                             .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
+                            // Korrekt: .fill ligger inni .background
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(activeField == .name ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+                            )
+                            // Korrekt: .stroke ligger inni .overlay
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(activeField == .name ? Color.accentColor : Color.clear, lineWidth: 2)
+                            )
+                            // Disse skal ligge på selve TextField (utenfor background/overlay)
                             .focused($isNameFocused)
                             .submitLabel(.done)
                             .onChange(of: name) { _, _ in updateSegment() }
                             .onChange(of: isNameFocused) { _, focused in
-                                if focused { onTyping() }
+                                if focused {
+                                    onTyping()
+                                    activeField = .name
+                                }
                             }
                     }
+                
                     
                     // 2. KATEGORI
                     VStack(alignment: .leading, spacing: 8) {
@@ -96,7 +114,9 @@ struct AddSegmentView: View {
                             CompactInputCell(
                                 value: "\(targetReps)",
                                 label: "Reps",
-                                action: { onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
+                                isActive: activeField == .reps,
+                                action: {
+                                    activeField = .reps; onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
                             )
                         }
                         
@@ -104,7 +124,9 @@ struct AddSegmentView: View {
                             CompactInputCell(
                                 value: weight == 0 ? "-" : String(format: "%.0f", weight),
                                 label: "kg",
+                                isActive: activeField == .weight,
                                 action: {
+                                    activeField = .weight
                                     let weightBinding = Binding<Int>(
                                         get: { Int(weight) },
                                         set: { weight = Double($0) }
@@ -118,7 +140,9 @@ struct AddSegmentView: View {
                             CompactInputCell(
                                 value: "\(duration)",
                                 label: "Sek",
-                                action: { onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
+                                isActive: activeField == .time,
+                                action: { activeField = .time
+                                    onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
                             )
                         }
                         
@@ -126,7 +150,8 @@ struct AddSegmentView: View {
                             CompactInputCell(
                                 value: distance == 0 ? "-" : String(format: "%.0f", distance),
                                 label: "Meter",
-                                action: {
+                                isActive: activeField == .distance,
+                                action: { activeField = .distance
                                     let distBinding = Binding<Int>(
                                         get: { Int(distance) },
                                         set: { distance = Double($0) }
@@ -145,13 +170,21 @@ struct AddSegmentView: View {
                         
                         TextField("Valgfritt...", text: $note)
                             .padding()
-                            .background(Color(.systemGray6))
+                            .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(activeField == .note ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+                                )
+                            .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(activeField == .note ? Color.accentColor : Color.clear, lineWidth: 2)
+                                )
                             .cornerRadius(12)
                             .focused($isNoteFocused)
                             .submitLabel(.done)
                             .onChange(of: note) { _, _ in updateSegment() }
                             .onChange(of: isNoteFocused) { _, focused in
-                                if focused { onTyping() }
+                                if focused { onTyping()
+                                    activeField = .note}
                             }
                     }
                     
@@ -192,6 +225,11 @@ struct AddSegmentView: View {
         .onChange(of: targetReps) { _, _ in updateSegment() }
         .onChange(of: weight) { _, _ in updateSegment() }
         .onChange(of: distance) { _, _ in updateSegment() }
+        // Lukker tastaturet hvis man bytter til knappene (reps/vekt etc.)
+        .onChange(of: activeField) { _, current in
+            if current != .name { isNameFocused = false }
+            if current != .note { isNoteFocused = false }
+        }
         
         .alert("Slett?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) { }
@@ -243,6 +281,7 @@ struct AddSegmentView: View {
 struct CompactInputCell: View {
     let value: String
     let label: String
+    var isActive: Bool = false // Ny parameter (default false)
     let action: () -> Void
     
     var body: some View {
@@ -251,13 +290,20 @@ struct CompactInputCell: View {
                 // Selve inndataboksen
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.secondarySystemGroupedBackground))
+                        // Liten fargeendring i bakgrunnen hvis aktiv
+                        .fill(isActive ? Color.accentColor.opacity(0.1) : Color(.secondarySystemGroupedBackground))
                         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+                        // Legger til en tydelig ramme (border) hvis aktiv
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isActive ? Color.accentColor : Color.clear, lineWidth: 2)
+                        )
                     
                     Text(value)
                         .font(.title3)
                         .fontWeight(.semibold)
-                        .foregroundStyle(Color.primary)
+                        // Farger teksten blå (accent) hvis aktiv
+                        .foregroundStyle(isActive ? Color.accentColor : Color.primary)
                         .padding(.vertical, 16)
                 }
                 
@@ -265,7 +311,7 @@ struct CompactInputCell: View {
                 Text(label)
                     .font(.caption2)
                     .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
             }
         }
         .buttonStyle(ScaleButtonStyle())

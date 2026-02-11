@@ -68,9 +68,14 @@ struct CircuitDetailView: View {
                             }
                             Spacer()
                             TextField("Navn på økt", text: $routine.name)
-                                .font(.headline)
+                                .font(.title2)
                                 .multilineTextAlignment(.center)
                                 .submitLabel(.done)
+                                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { obj in
+                                    if let textField = obj.object as? UITextField {
+                                        textField.selectAll(nil)
+                                    }
+                                }
                             Spacer()
                             Color.clear.frame(width: 60, height: 44)
                         }
@@ -219,25 +224,33 @@ struct CircuitDetailView: View {
     // --- FUNKSJONER ---
     
     func addSegment() {
-        let nextNumber = routine.segments.count + 1
-        let autoName = "Øvelse \(nextNumber)"
-        
-        let newSegment = CircuitExercise(
-            name: autoName,
-            durationSeconds: 45,
-            targetReps: 10,
-            category: .strength,
-            note: "",
-            sortIndex: routine.segments.count
-        )
-        
-        modelContext.insert(newSegment)
-        routine.segments.append(newSegment)
-        
-        withAnimation(.snappy) {
-            activeDrawer = .editSegment(newSegment)
+            // 1. Finn forrige segment for å kopiere verdier
+            // Vi sorterer listen for å være sikre på at vi henter den logisk siste øvelsen
+            let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
+            
+            let nextNumber = routine.segments.count + 1
+            let autoName = "Øvelse \(nextNumber)"
+            
+            // 2. Bruk verdiene fra forrige segment, eller defaults hvis det er første øvelse
+            let newSegment = CircuitExercise(
+                name: autoName,
+                // Her bruker vi "coalescing" (??) for å velge: "Verdi fra forrige" ELLER "Standardverdi"
+                durationSeconds: lastSegment?.durationSeconds ?? 45,
+                targetReps: lastSegment?.targetReps ?? 10,
+                weight: lastSegment?.weight ?? 0.0,
+                distance: lastSegment?.distance ?? 0.0,
+                category: lastSegment?.category ?? .strength,
+                note: "",
+                sortIndex: routine.segments.count
+            )
+            
+            modelContext.insert(newSegment)
+            routine.segments.append(newSegment)
+            
+            withAnimation(.snappy) {
+                activeDrawer = .editSegment(newSegment)
+            }
         }
-    }
     
     private func logWorkout() {
         let log = WorkoutLog(routineName: routine.name, date: Date())
