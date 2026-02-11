@@ -4,6 +4,7 @@
 //
 //  Created by Frode Halrynjo on 06/02/2026.
 //
+
 import SwiftUI
 import SwiftData
 
@@ -16,6 +17,9 @@ struct AddSegmentView: View {
     var onDismiss: () -> Void
     var onRequestPicker: (String, Binding<Int>, ClosedRange<Int>, Int) -> Void
     var onTyping: () -> Void
+    
+    // NYTT: Callback for å bytte segment (for pilene)
+    var onSwitchSegment: ((CircuitExercise) -> Void)?
     
     @State private var name = ""
     @State private var selectedCategory: ExerciseCategory = .strength
@@ -34,7 +38,22 @@ struct AddSegmentView: View {
     enum ActiveField { case name, note, reps, weight, time, distance }
     @State private var activeField: ActiveField? = nil
     
+    // NYTT: Hjelpere for navigasjon
+    private var sortedSegments: [CircuitExercise] {
+        routine.segments.sorted { $0.sortIndex < $1.sortIndex }
+    }
     
+    private var previousSegment: CircuitExercise? {
+        guard let current = segmentToEdit,
+              let index = sortedSegments.firstIndex(of: current) else { return nil }
+        return index > 0 ? sortedSegments[index - 1] : nil
+    }
+    
+    private var nextSegment: CircuitExercise? {
+        guard let current = segmentToEdit,
+              let index = sortedSegments.firstIndex(of: current) else { return nil }
+        return index < sortedSegments.count - 1 ? sortedSegments[index + 1] : nil
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -42,36 +61,62 @@ struct AddSegmentView: View {
             ScrollView {
                 VStack(spacing: 25) {
                     
-                    // 1. NAVN
+                    // 1. NAVN MED PILER
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Øvelsesnavn")
                             .font(.caption).foregroundStyle(.secondary)
                         
-                        TextField("F.eks. Pause eller Knebøy", text: $name)
-                            .font(.title3)
-                            .padding()
-                            // Korrekt: .fill ligger inni .background
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(activeField == .name ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-                            )
-                            // Korrekt: .stroke ligger inni .overlay
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(activeField == .name ? Color.accentColor : Color.clear, lineWidth: 2)
-                            )
-                            // Disse skal ligge på selve TextField (utenfor background/overlay)
-                            .focused($isNameFocused)
-                            .submitLabel(.done)
-                            .onChange(of: name) { _, _ in updateSegment() }
-                            .onChange(of: isNameFocused) { _, focused in
-                                if focused {
-                                    onTyping()
-                                    activeField = .name
-                                }
+                        HStack(spacing: 12) {
+                            // VENSTRE PIL (Forrige)
+                            Button(action: {
+                                if let prev = previousSegment { onSwitchSegment?(prev) }
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(previousSegment != nil ? Color.primary : Color.secondary.opacity(0.3))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color(.secondarySystemFill))
+                                    .clipShape(Circle())
                             }
+                            .disabled(previousSegment == nil)
+                            
+                            // SELVE TEKSTFELTET
+                            TextField("F.eks. Pause eller Knebøy", text: $name)
+                                .font(.title3)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(activeField == .name ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(activeField == .name ? Color.accentColor : Color.clear, lineWidth: 2)
+                                )
+                                .focused($isNameFocused)
+                                .submitLabel(.done)
+                                .onChange(of: name) { _, _ in updateSegment() }
+                                .onChange(of: isNameFocused) { _, focused in
+                                    if focused {
+                                        onTyping()
+                                        activeField = .name
+                                    }
+                                }
+                            
+                            // HØYRE PIL (Neste)
+                            Button(action: {
+                                if let next = nextSegment { onSwitchSegment?(next) }
+                            }) {
+                                Image(systemName: "chevron.right")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(nextSegment != nil ? Color.primary : Color.secondary.opacity(0.3))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color(.secondarySystemFill))
+                                    .clipShape(Circle())
+                            }
+                            .disabled(nextSegment == nil)
+                        }
                     }
-                
+                    
                     
                     // 2. KATEGORI
                     VStack(alignment: .leading, spacing: 8) {
@@ -171,13 +216,13 @@ struct AddSegmentView: View {
                         TextField("Valgfritt...", text: $note)
                             .padding()
                             .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(activeField == .note ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-                                )
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(activeField == .note ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+                            )
                             .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(activeField == .note ? Color.accentColor : Color.clear, lineWidth: 2)
-                                )
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(activeField == .note ? Color.accentColor : Color.clear, lineWidth: 2)
+                            )
                             .cornerRadius(12)
                             .focused($isNoteFocused)
                             .submitLabel(.done)
@@ -209,22 +254,18 @@ struct AddSegmentView: View {
             }
         }
         .onAppear {
-            if let segment = segmentToEdit {
-                name = segment.name
-                selectedCategory = segment.category
-                note = segment.note
-                duration = segment.durationSeconds
-                targetReps = segment.targetReps
-                weight = segment.weight
-                distance = segment.distance
-            }
+            loadData()
         }
-        // VIKTIG: Vi har lagt tilbake .onChange slik at LogDetailView fanger opp endringene
-        // Siden VerticalRuler nå fikser haptics selv, er dette trygt igjen.
+        // NYTT: Oppdaterer data hvis viewet byttes ut (f.eks. via pilene)
+        .onChange(of: segmentToEdit) { _, _ in
+            loadData()
+        }
+        
         .onChange(of: duration) { _, _ in updateSegment() }
         .onChange(of: targetReps) { _, _ in updateSegment() }
         .onChange(of: weight) { _, _ in updateSegment() }
         .onChange(of: distance) { _, _ in updateSegment() }
+        
         // Lukker tastaturet hvis man bytter til knappene (reps/vekt etc.)
         .onChange(of: activeField) { _, current in
             if current != .name { isNameFocused = false }
@@ -236,6 +277,22 @@ struct AddSegmentView: View {
             Button("Slett", role: .destructive) { deleteSegment() }
         } message: {
             Text("Er du sikker på at du vil fjerne denne delen?")
+        }
+    }
+    
+    // Flyttet onAppear-logikken hit for å kunne kalle den på nytt
+    func loadData() {
+        if let segment = segmentToEdit {
+            name = segment.name
+            selectedCategory = segment.category
+            note = segment.note
+            duration = segment.durationSeconds
+            targetReps = segment.targetReps
+            weight = segment.weight
+            distance = segment.distance
+            
+            // Tilbakestill aktivt felt ved bytte av øvelse
+            activeField = nil
         }
     }
     
@@ -256,9 +313,6 @@ struct AddSegmentView: View {
     func updateSegment() {
         guard let segment = segmentToEdit else { return }
         
-        // Oppdaterer objektet direkte.
-        // I LogDetailView er dette et midlertidig objekt (raskt).
-        // I CircuitDetailView er dette databasen (litt tregere, men Ruleren håndterer det nå).
         if segment.name != name { segment.name = name }
         if segment.category != selectedCategory { segment.category = selectedCategory }
         if segment.note != note { segment.note = note }
@@ -281,7 +335,7 @@ struct AddSegmentView: View {
 struct CompactInputCell: View {
     let value: String
     let label: String
-    var isActive: Bool = false // Ny parameter (default false)
+    var isActive: Bool = false
     let action: () -> Void
     
     var body: some View {

@@ -68,9 +68,10 @@ struct CircuitDetailView: View {
                             }
                             Spacer()
                             TextField("Navn på økt", text: $routine.name)
-                                .font(.title2)
+                                .font(.title2.bold()) // Endret: Større og fetere skrift
                                 .multilineTextAlignment(.center)
                                 .submitLabel(.done)
+                                // Nytt: Markerer all tekst når feltet blir aktivt
                                 .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { obj in
                                     if let textField = obj.object as? UITextField {
                                         textField.selectAll(nil)
@@ -95,7 +96,7 @@ struct CircuitDetailView: View {
                                             theme: currentTheme,
                                             draggingSegment: $draggingSegment,
                                             onEdit: { activeDrawer = .editSegment(segment) }
-                                          
+                                            
                                         )
                                         .onDrop(of: [.text], delegate: GridDropDelegate(
                                             item: segment,
@@ -106,17 +107,15 @@ struct CircuitDetailView: View {
                                     }
                                     
                                     // LEGG TIL KNAPP
-                                                                        HStack(spacing: 8) {
-                                                                            Button(action: addSegment) {
-                                                                                TreningsKort(tittel: "Legg til", ikon: "plus", bakgrunnsfarge: Color(.systemGray6), tekstFarge: .blue)
-                                                                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(style: StrokeStyle(lineWidth: 2, dash: [5])).foregroundStyle(Color.blue.opacity(0.5)))
-                                                                            }
-                                                                            .buttonStyle(ScaleButtonStyle())
-                                                                            .aspectRatio(1.0, contentMode: .fit)
-                                                                            
-                                                                            // Usynlig boks for å matche bredden til pilen i de andre kortene (20pt)
-                                                                            Color.clear.frame(width: 20)
-                                                                        }
+                                    Button(action: addSegment) {
+                                        TreningsKort(tittel: "Legg til", ikon: "plus", bakgrunnsfarge: Color(.systemGray6), tekstFarge: .blue)
+                                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(style: StrokeStyle(lineWidth: 2, dash: [5])).foregroundStyle(Color.blue.opacity(0.5)))
+                                    }
+                                    .buttonStyle(ScaleButtonStyle())
+                                    .aspectRatio(1.0, contentMode: .fit)
+                                    
+                                    // Usynlig boks for å matche bredden til pilen i de andre kortene (20pt)
+                                    Color.clear.frame(width: 20)
                                 }
                                 .padding(.horizontal)
                                 .padding(.bottom, 120)
@@ -158,8 +157,8 @@ struct CircuitDetailView: View {
                 // --- HOVEDSKUFF (Add/Edit) ---
                 if let drawerState = activeDrawer {
                     let availableHeight = activePicker != nil
-                        ? (geometry.size.height - pickerHeight)
-                        : (geometry.size.height + 60)
+                    ? (geometry.size.height - pickerHeight)
+                    : (geometry.size.height + 60)
                     
                     DrawerView(theme: currentTheme, edge: .top, maxHeight: availableHeight) {
                         switch drawerState {
@@ -169,16 +168,20 @@ struct CircuitDetailView: View {
                                 segmentToEdit: segment,
                                 onDismiss: { closeAllPanels() },
                                 onRequestPicker: { title, binding, range, step in
-                                                            // 1. Lukk tastaturet hvis det er åpent
-                                                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                                            
-                                                            // 2. Åpne pickeren (skuffen)
-                                                            withAnimation(.snappy) {
-                                                                activePicker = PickerState(title: title, binding: binding, range: range, step: step)
-                                                            }
-                                                        },
+                                    // 1. Lukk tastaturet hvis det er åpent
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                    
+                                    // 2. Åpne pickeren (skuffen)
+                                    withAnimation(.snappy) {
+                                        activePicker = PickerState(title: title, binding: binding, range: range, step: step)
+                                    }
+                                },
                                 onTyping: {
                                     withAnimation(.snappy) { activePicker = nil }
+                                },
+                                // NYTT: Kobler på funksjonen for å bytte øvelse med pilene
+                                onSwitchSegment: { newSegment in
+                                    activeDrawer = .editSegment(newSegment)
                                 }
                             )
                         }
@@ -188,22 +191,22 @@ struct CircuitDetailView: View {
                 }
                 
                 // --- PICKER SKUFF (Ny Vertical Ruler) ---
-                                if let pickerState = activePicker {
-                                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                                        VStack(spacing: 0) {
-                                            
-                                            // Den nye linjalen
-                                            VerticalRuler(
-                                                value: pickerState.binding,
-                                                range: pickerState.range,
-                                                step: pickerState.step
-                                            )
-                                            
-                                            Spacer()
-                                        }
-                                    }
-                                    .zIndex(12)
-                                }
+                if let pickerState = activePicker {
+                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
+                        VStack(spacing: 0) {
+                            
+                            // Den nye linjalen
+                            VerticalRuler(
+                                value: pickerState.binding,
+                                range: pickerState.range,
+                                step: pickerState.step
+                            )
+                            
+                            Spacer()
+                        }
+                    }
+                    .zIndex(12)
+                }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -224,33 +227,33 @@ struct CircuitDetailView: View {
     // --- FUNKSJONER ---
     
     func addSegment() {
-            // 1. Finn forrige segment for å kopiere verdier
-            // Vi sorterer listen for å være sikre på at vi henter den logisk siste øvelsen
-            let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
-            
-            let nextNumber = routine.segments.count + 1
-            let autoName = "Øvelse \(nextNumber)"
-            
-            // 2. Bruk verdiene fra forrige segment, eller defaults hvis det er første øvelse
-            let newSegment = CircuitExercise(
-                name: autoName,
-                // Her bruker vi "coalescing" (??) for å velge: "Verdi fra forrige" ELLER "Standardverdi"
-                durationSeconds: lastSegment?.durationSeconds ?? 45,
-                targetReps: lastSegment?.targetReps ?? 10,
-                weight: lastSegment?.weight ?? 0.0,
-                distance: lastSegment?.distance ?? 0.0,
-                category: lastSegment?.category ?? .strength,
-                note: "",
-                sortIndex: routine.segments.count
-            )
-            
-            modelContext.insert(newSegment)
-            routine.segments.append(newSegment)
-            
-            withAnimation(.snappy) {
-                activeDrawer = .editSegment(newSegment)
-            }
+        // 1. Finn forrige segment for å kopiere verdier
+        // Vi sorterer listen for å være sikre på at vi henter den logisk siste øvelsen
+        let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
+        
+        let nextNumber = routine.segments.count + 1
+        let autoName = "Øvelse \(nextNumber)"
+        
+        // 2. Bruk verdiene fra forrige segment, eller defaults hvis det er første øvelse
+        let newSegment = CircuitExercise(
+            name: autoName,
+            // Her bruker vi "coalescing" (??) for å velge: "Verdi fra forrige" ELLER "Standardverdi"
+            durationSeconds: lastSegment?.durationSeconds ?? 45,
+            targetReps: lastSegment?.targetReps ?? 10,
+            weight: lastSegment?.weight ?? 0.0,
+            distance: lastSegment?.distance ?? 0.0,
+            category: lastSegment?.category ?? .strength,
+            note: "",
+            sortIndex: routine.segments.count
+        )
+        
+        modelContext.insert(newSegment)
+        routine.segments.append(newSegment)
+        
+        withAnimation(.snappy) {
+            activeDrawer = .editSegment(newSegment)
         }
+    }
     
     private func logWorkout() {
         let log = WorkoutLog(routineName: routine.name, date: Date())
@@ -290,7 +293,7 @@ struct CircuitDetailView: View {
             activePicker = PickerState(title: "Endre reps", binding: Binding(get: { segment.targetReps }, set: { segment.targetReps = $0 }), range: 1...100, step: 1)
         }
     }
-
+    
     private func refreshUILoad() {
         let uniqueSegments = Set(routine.segments)
         self.uiSegments = Array(uniqueSegments).sorted { $0.sortIndex < $1.sortIndex }
@@ -314,17 +317,17 @@ struct DraggableSegmentView: View {
     var body: some View {
         HStack(spacing: 8) {
             
-                TreningsKort(
-                    tittel: segment.name,
-                    undertittel: segmentDescription(for: segment),
-                    ikon: iconForSegment(segment),
-                    bakgrunnsfarge: theme.color(for: segment.category),
-                    tekstFarge: segment.category == .other ? Color.primary : theme.textColor
-                )
-                .onTapGesture { onEdit() }
-                .aspectRatio(1.0, contentMode: .fit)
-                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
-                .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
+            TreningsKort(
+                tittel: segment.name,
+                undertittel: segmentDescription(for: segment),
+                ikon: iconForSegment(segment),
+                bakgrunnsfarge: theme.color(for: segment.category),
+                tekstFarge: segment.category == .other ? Color.primary : theme.textColor
+            )
+            .onTapGesture { onEdit() }
+            .aspectRatio(1.0, contentMode: .fit)
+            .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
+            .onDrag { self.draggingSegment = segment; return NSItemProvider(object: String(describing: segment.persistentModelID) as NSString) }
             
             Image(systemName: theme.arrowIcon)
                 .font(.title3)
@@ -386,7 +389,7 @@ struct GridDropDelegate: DropDelegate {
     @Binding var items: [CircuitExercise]
     @Binding var draggingItem: CircuitExercise?
     var onSave: () -> Void
-
+    
     func dropUpdated(info: DropInfo) -> DropProposal? { return DropProposal(operation: .move) }
     func performDrop(info: DropInfo) -> Bool { draggingItem = nil; onSave(); return true }
     func dropEntered(info: DropInfo) {
@@ -455,6 +458,7 @@ func formatTid(_ sekunder: Int) -> String {
 func iconForSegment(_ segment: CircuitExercise) -> String? {
     switch segment.category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
 }
+
 struct VerticalRuler: View {
     @Binding var value: Int
     let range: ClosedRange<Int>
