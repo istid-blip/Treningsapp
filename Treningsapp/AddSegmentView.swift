@@ -18,8 +18,9 @@ struct AddSegmentView: View {
     var onRequestPicker: (String, Binding<Int>, ClosedRange<Int>, Int) -> Void
     var onTyping: () -> Void
     
-    // NYTT: Callback for å bytte segment (for pilene)
+    // Callbacks
     var onSwitchSegment: ((CircuitExercise) -> Void)?
+    var onStartTimer: ((Int) -> Void)? // <--- NY: Callback for å starte timer
     
     @State private var name = ""
     @State private var selectedCategory: ExerciseCategory = .strength
@@ -38,7 +39,7 @@ struct AddSegmentView: View {
     enum ActiveField { case name, note, reps, weight, time, distance }
     @State private var activeField: ActiveField? = nil
     
-    // NYTT: Hjelpere for navigasjon
+    // Hjelpere for navigasjon
     private var sortedSegments: [CircuitExercise] {
         routine.segments.sorted { $0.sortIndex < $1.sortIndex }
     }
@@ -182,15 +183,19 @@ struct AddSegmentView: View {
                         }
                         
                         if showTime {
+                            // Tidsvelger
+                            // Tidsvelger
                             CompactInputCell(
-                                value: "\(duration)",
-                                label: "Sek",
+                                // Viser tid formatert (eks: 1:00) eller bare sekunder hvis under minuttet
+                                value: duration >= 60 ? String(format: "%d:%02d", duration / 60, duration % 60) : "\(duration)",
+                                label: "Tid", // Endret fra "Sek"
                                 isActive: activeField == .time,
-                                action: { activeField = .time
-                                    onRequestPicker("Tid (sek)", $duration, 5...600, 5) }
+                                action: {
+                                    activeField = .time
+                                    onRequestPicker("Tid", $duration, 0...3600, 5) // Utvidet range, starter på 0
+                                }
                             )
                         }
-                        
                         if showDistance {
                             CompactInputCell(
                                 value: distance == 0 ? "-" : String(format: "%.0f", distance),
@@ -256,7 +261,6 @@ struct AddSegmentView: View {
         .onAppear {
             loadData()
         }
-        // NYTT: Oppdaterer data hvis viewet byttes ut (f.eks. via pilene)
         .onChange(of: segmentToEdit) { _, _ in
             loadData()
         }
@@ -280,7 +284,6 @@ struct AddSegmentView: View {
         }
     }
     
-    // Flyttet onAppear-logikken hit for å kunne kalle den på nytt
     func loadData() {
         if let segment = segmentToEdit {
             name = segment.name

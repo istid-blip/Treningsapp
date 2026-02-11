@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 import UIKit
+import Combine
 
 // UI States
 enum DrawerState: Identifiable {
@@ -19,6 +20,10 @@ struct PickerState: Identifiable {
     let binding: Binding<Int>
     let range: ClosedRange<Int>
     let step: Int
+    
+    var isTimePicker: Bool {
+        title.lowercased().contains("tid") || title.lowercased().contains("sek")
+    }
 }
 
 struct CircuitDetailView: View {
@@ -31,16 +36,18 @@ struct CircuitDetailView: View {
     @State private var activeDrawer: DrawerState? = nil
     @State private var activePicker: PickerState? = nil
     
+    // Styrer visning i tidsskuffen (Stoppeklokke vs Linjal)
+    @State private var showStopwatchMode = true
+    
     @State private var uiSegments: [CircuitExercise] = []
     @State private var showLogConfirmation = false
-    
-    // NY: Husker hva navnet var da vi kom inn
     @State private var originalName: String = ""
     
-    // Grid configuration
     let columns = [GridItem(.adaptive(minimum: 110), spacing: 16)]
     let currentTheme: AppTheme = .standard
-    let pickerHeight: CGFloat = 320
+    
+    // Endring 1: Redusert høyden på skuffen betraktelig (var 380)
+    let pickerHeight: CGFloat = 280
     
     var body: some View {
         GeometryReader { geometry in
@@ -52,9 +59,7 @@ struct CircuitDetailView: View {
                         
                         // 1. HEADER
                         HStack {
-                            // NY LOGIKK: Tilbake-knappen
                             Button(action: {
-                                // Sjekk: Er økten tom OG har navnet vi startet med?
                                 if routine.segments.isEmpty && routine.name == originalName {
                                     modelContext.delete(routine)
                                 }
@@ -68,10 +73,9 @@ struct CircuitDetailView: View {
                             }
                             Spacer()
                             TextField("Navn på økt", text: $routine.name)
-                                .font(.title2.bold()) // Endret: Større og fetere skrift
+                                .font(.title2.bold())
                                 .multilineTextAlignment(.center)
                                 .submitLabel(.done)
-                                // Nytt: Markerer all tekst når feltet blir aktivt
                                 .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { obj in
                                     if let textField = obj.object as? UITextField {
                                         textField.selectAll(nil)
@@ -113,8 +117,6 @@ struct CircuitDetailView: View {
                                     }
                                     .buttonStyle(ScaleButtonStyle())
                                     .aspectRatio(1.0, contentMode: .fit)
-                                    
-                                    // Usynlig boks for å matche bredden til pilen i de andre kortene (20pt)
                                     Color.clear.frame(width: 20)
                                 }
                                 .padding(.horizontal)
@@ -156,7 +158,7 @@ struct CircuitDetailView: View {
                 
                 // --- HOVEDSKUFF (Add/Edit) ---
                 if let drawerState = activeDrawer {
-                    let availableHeight = activePicker != nil
+                    let availableHeight = (activePicker != nil)
                     ? (geometry.size.height - pickerHeight)
                     : (geometry.size.height + 60)
                     
@@ -168,10 +170,11 @@ struct CircuitDetailView: View {
                                 segmentToEdit: segment,
                                 onDismiss: { closeAllPanels() },
                                 onRequestPicker: { title, binding, range, step in
-                                    // 1. Lukk tastaturet hvis det er åpent
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     
-                                    // 2. Åpne pickeren (skuffen)
+                                    let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
+                                    showStopwatchMode = isTime // Default til stopwatch for tid
+                                    
                                     withAnimation(.snappy) {
                                         activePicker = PickerState(title: title, binding: binding, range: range, step: step)
                                     }
@@ -179,7 +182,6 @@ struct CircuitDetailView: View {
                                 onTyping: {
                                     withAnimation(.snappy) { activePicker = nil }
                                 },
-                                // NYTT: Kobler på funksjonen for å bytte øvelse med pilene
                                 onSwitchSegment: { newSegment in
                                     activeDrawer = .editSegment(newSegment)
                                 }
@@ -190,19 +192,56 @@ struct CircuitDetailView: View {
                     .ignoresSafeArea(.all, edges: .top)
                 }
                 
-                // --- PICKER SKUFF (Ny Vertical Ruler) ---
+                // --- PICKER / STOPWATCH SKUFF ---
                 if let pickerState = activePicker {
                     DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                        VStack(spacing: 0) {
+                        
+                        // Endring 2: Endret alignment til bottomTrailing for toggle-knappen
+                        ZStack(alignment: .bottomTrailing) {
                             
-                            // Den nye linjalen
-                            VerticalRuler(
-                                value: pickerState.binding,
-                                range: pickerState.range,
-                                step: pickerState.step
-                            )
+                            // 1. HOVEDINNHOLD (Sentrert)
+                            VStack {
+                                Spacer()
+                                if pickerState.isTimePicker && showStopwatchMode {
+                                    // MODUS A: Stoppeklokke (Rund og sentrert)
+                                    StopwatchView(bindingTime: pickerState.binding)
+                                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                                } else {
+                                    // MODUS B: Linjal (Ruler)
+                                    VerticalRuler(
+                                        value: pickerState.binding,
+                                        range: pickerState.range,
+                                        step: pickerState.step
+                                    )
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .animation(.snappy(duration: 0.3), value: showStopwatchMode)
                             
-                            Spacer()
+                            // 2. TOGGLE KNAPP (Nede til HØYRE og RUND)
+                            if pickerState.isTimePicker {
+                                Button(action: {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                        showStopwatchMode.toggle()
+                                    }
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(.secondarySystemFill))
+                                            .shadow(radius: 2)
+                                        
+                                        // Viser motsatt ikon av hva du ser
+                                        Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
+                                            .font(.title2)
+                                            .foregroundStyle(.primary)
+                                    }
+                                    .frame(width: 50, height: 50)
+                                }
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 20)
+                            }
                         }
                     }
                     .zIndex(12)
@@ -212,10 +251,7 @@ struct CircuitDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             refreshUILoad()
-            // Lagre originalnavnet når vi åpner siden
-            if originalName.isEmpty {
-                originalName = routine.name
-            }
+            if originalName.isEmpty { originalName = routine.name }
         }
         .alert("Økt logget!", isPresented: $showLogConfirmation) {
             Button("OK", role: .cancel) { dismiss() }
@@ -227,17 +263,12 @@ struct CircuitDetailView: View {
     // --- FUNKSJONER ---
     
     func addSegment() {
-        // 1. Finn forrige segment for å kopiere verdier
-        // Vi sorterer listen for å være sikre på at vi henter den logisk siste øvelsen
         let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
-        
         let nextNumber = routine.segments.count + 1
         let autoName = "Øvelse \(nextNumber)"
         
-        // 2. Bruk verdiene fra forrige segment, eller defaults hvis det er første øvelse
         let newSegment = CircuitExercise(
             name: autoName,
-            // Her bruker vi "coalescing" (??) for å velge: "Verdi fra forrige" ELLER "Standardverdi"
             durationSeconds: lastSegment?.durationSeconds ?? 45,
             targetReps: lastSegment?.targetReps ?? 10,
             weight: lastSegment?.weight ?? 0.0,
@@ -257,7 +288,6 @@ struct CircuitDetailView: View {
     
     private func logWorkout() {
         let log = WorkoutLog(routineName: routine.name, date: Date())
-        
         for segment in uiSegments {
             let loggedExercise = LoggedExercise(
                 name: segment.name,
@@ -270,10 +300,8 @@ struct CircuitDetailView: View {
             )
             log.exercises.append(loggedExercise)
         }
-        
         modelContext.insert(log)
         try? modelContext.save()
-        
         showLogConfirmation = true
     }
     
@@ -286,14 +314,6 @@ struct CircuitDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refreshUILoad() }
     }
     
-    private func openPickerFor(segment: CircuitExercise) {
-        if segment.category == .cardio || segment.category == .other {
-            activePicker = PickerState(title: "Endre tid (sek)", binding: Binding(get: { segment.durationSeconds }, set: { segment.durationSeconds = $0 }), range: 5...600, step: 5)
-        } else {
-            activePicker = PickerState(title: "Endre reps", binding: Binding(get: { segment.targetReps }, set: { segment.targetReps = $0 }), range: 1...100, step: 1)
-        }
-    }
-    
     private func refreshUILoad() {
         let uniqueSegments = Set(routine.segments)
         self.uiSegments = Array(uniqueSegments).sorted { $0.sortIndex < $1.sortIndex }
@@ -302,6 +322,79 @@ struct CircuitDetailView: View {
     private func saveSortOrder() {
         for (index, segment) in uiSegments.enumerated() { segment.sortIndex = index }
         try? modelContext.save()
+    }
+}
+
+// --- STOPPEKLOKKE VISNING ---
+struct StopwatchView: View {
+    @Binding var bindingTime: Int
+    
+    @State private var elapsedTime: Double = 0.0
+    @State private var isRunning = false
+    
+    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        VStack {
+            // Endring 3: Mindre sirkel (190pt)
+            Button(action: toggleStopwatch) {
+                ZStack {
+                    Circle()
+                        .fill(isRunning ? Color.orange : Color.green)
+                        .shadow(color: (isRunning ? Color.orange : Color.green).opacity(0.4), radius: 15, x: 0, y: 5)
+                    
+                    if isRunning {
+                        Circle()
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                            .scaleEffect(1.1)
+                            .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: isRunning)
+                    }
+                    
+                    VStack(spacing: 5) {
+                        Text(formatDetailedTime(elapsedTime))
+                            .font(.system(size: 48, weight: .bold, design: .rounded)) // Litt mindre font
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .contentTransition(.numericText(value: elapsedTime))
+                        
+                        Image(systemName: isRunning ? "pause.fill" : "play.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
+                .frame(width: 190, height: 190) // Redusert størrelse
+            }
+            .buttonStyle(ScaleButtonStyle())
+        }
+        .onAppear {
+            elapsedTime = Double(bindingTime)
+        }
+        .onReceive(timer) { _ in
+            guard isRunning else { return }
+            elapsedTime += 0.1
+            
+            if Int(elapsedTime) != bindingTime {
+                bindingTime = Int(elapsedTime)
+            }
+        }
+        .onDisappear {
+            isRunning = false
+        }
+    }
+    
+    func toggleStopwatch() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isRunning.toggle()
+        }
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+    
+    func formatDetailedTime(_ totalSeconds: Double) -> String {
+        let seconds = Int(totalSeconds)
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 }
 
@@ -316,7 +409,6 @@ struct DraggableSegmentView: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            
             TreningsKort(
                 tittel: segment.name,
                 undertittel: segmentDescription(for: segment),
@@ -335,14 +427,6 @@ struct DraggableSegmentView: View {
                 .foregroundStyle(theme.arrowColor)
                 .frame(width: 20)
                 .opacity(isLast ? 0 : 1)
-        }
-    }
-    
-    func valueToDisplay() -> Int {
-        if segment.category == .cardio || segment.category == .other {
-            return segment.durationSeconds
-        } else {
-            return segment.targetReps
         }
     }
 }
@@ -382,8 +466,6 @@ struct DrawerView<Content: View>: View {
     }
 }
 
-// --- HJELPEFUNKSJONER ---
-
 struct GridDropDelegate: DropDelegate {
     let item: CircuitExercise
     @Binding var items: [CircuitExercise]
@@ -412,7 +494,6 @@ func segmentDescription(for segment: CircuitExercise) -> String {
     
     switch segment.category {
     case .strength:
-        // STYRKE: Vis Reps og Vekt
         if segment.targetReps > 0 {
             if segment.weight > 0 {
                 linjer.append("\(segment.targetReps) x \(Int(segment.weight)) kg")
@@ -422,29 +503,20 @@ func segmentDescription(for segment: CircuitExercise) -> String {
         } else if segment.weight > 0 {
             linjer.append("\(Int(segment.weight)) kg")
         }
-        
     case .cardio:
-        // KONDISJON: Vis Tid og Avstand (Ignorer reps/vekt selv om det ligger lagret)
         if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
         if segment.distance > 0 { linjer.append("\(Int(segment.distance)) m") }
-        
     case .combined:
-        // KOMBINERT: Vis alt som er satt
         if segment.targetReps > 0 { linjer.append("\(segment.targetReps) reps") }
         if segment.weight > 0 { linjer.append("\(Int(segment.weight)) kg") }
         if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
         if segment.distance > 0 { linjer.append("\(Int(segment.distance)) m") }
-        
     case .other:
-        // ANNET: Vis primært tid
         if segment.durationSeconds > 0 { linjer.append(formatTid(segment.durationSeconds)) }
     }
-    
-    // Hvis ingen info er satt, vis en bindestrek
     return linjer.isEmpty ? "-" : linjer.joined(separator: "\n")
 }
 
-// Hjelpefunksjon for tid
 func formatTid(_ sekunder: Int) -> String {
     if sekunder >= 60 {
         let min = sekunder / 60
@@ -464,15 +536,13 @@ struct VerticalRuler: View {
     let range: ClosedRange<Int>
     let step: Int
     
-    // Konstanter for utseende
     private let itemHeight: CGFloat = 40
-    private let rulerHeight: CGFloat = 250
     
-    // Tilstand for bevegelse
+    // Endring 4: Justert høyden på ruleren internt (var 250)
+    private let rulerHeight: CGFloat = 200
+    
     @State private var dragOffset: CGFloat = 0
     @State private var initialDragValue: Int? = nil
-    
-    // Feedback generator
     let feedbackGenerator = UISelectionFeedbackGenerator()
     
     var body: some View {
@@ -482,7 +552,6 @@ struct VerticalRuler: View {
             
             ZStack {
                 Color.black.opacity(0.001).contentShape(Rectangle())
-                
                 let numLinesHalf = Int(ceil(rulerHeight / itemHeight / 2)) + 1
                 
                 ForEach(-numLinesHalf...numLinesHalf, id: \.self) { i in
@@ -515,21 +584,18 @@ struct VerticalRuler: View {
                     .onChanged { gesture in
                         if initialDragValue == nil {
                             initialDragValue = value
-                            feedbackGenerator.prepare() // Gjør klar haptics
+                            feedbackGenerator.prepare()
                         }
-                        
                         let rawTranslation = gesture.translation.height
                         let magnitude = abs(rawTranslation)
                         let boostFactor = 1.0 + (magnitude / 200.0)
                         let effectiveTranslation = rawTranslation * boostFactor
-                        
                         let steps = -Int(effectiveTranslation / itemHeight)
                         let remainder = effectiveTranslation.truncatingRemainder(dividingBy: itemHeight)
                         
                         if let startVal = initialDragValue {
                             let calculatedValue = startVal + (steps * step)
                             var newValue = value
-                            
                             if calculatedValue < range.lowerBound {
                                 newValue = range.lowerBound
                                 dragOffset = remainder / 3
@@ -540,19 +606,15 @@ struct VerticalRuler: View {
                                 newValue = calculatedValue
                                 dragOffset = remainder
                             }
-                            
-                            // VIKTIG: Sjekk om verdien faktisk endres før vi oppdaterer bindingen
                             if newValue != value {
-                                feedbackGenerator.selectionChanged() // <--- PANG! Direkte feedback
+                                feedbackGenerator.selectionChanged()
                                 value = newValue
                             }
                         }
                     }
                     .onEnded { _ in
                         initialDragValue = nil
-                        withAnimation(.snappy(duration: 0.15)) {
-                            dragOffset = 0
-                        }
+                        withAnimation(.snappy(duration: 0.15)) { dragOffset = 0 }
                     }
             )
         }
