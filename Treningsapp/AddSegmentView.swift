@@ -26,7 +26,7 @@ struct AddSegmentView: View {
     @State private var selectedCategory: ExerciseCategory = .strength
     @State private var note = ""
     
-    @State private var duration = 45
+    @State private var duration = 0
     @State private var targetReps = 10
     @State private var weight: Double = 0.0
     @State private var distance: Double = 0.0

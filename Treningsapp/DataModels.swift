@@ -77,6 +77,7 @@ final class CircuitExercise {
 final class WorkoutLog {
     var routineName: String
     var date: Date
+    var totalDuration: Int = 0 // <--- NY: Lagrer total tid i sekunder
     var wasEdited: Bool = false
     
     @Relationship(deleteRule: .cascade) var exercises: [LoggedExercise] = []
@@ -86,9 +87,10 @@ final class WorkoutLog {
         exercises.filter { $0.hasChanges }.count
     }
     
-    init(routineName: String, date: Date = Date()) {
+    init(routineName: String, date: Date = Date(), totalDuration: Int = 0) {
         self.routineName = routineName
         self.date = date
+        self.totalDuration = totalDuration
     }
 }
 
@@ -128,5 +130,14 @@ final class LoggedExercise {
         self.weight = weight
         self.distance = distance
         self.note = note
+    }
+}
+func formatTid(_ sekunder: Int) -> String {
+    if sekunder >= 60 {
+        let min = sekunder / 60
+        let sek = sekunder % 60
+        return String(format: "%d:%02d min", min, sek)
+    } else {
+        return "\(sekunder) sek"
     }
 }

@@ -9,7 +9,7 @@ enum DrawerState: Identifiable {
     case editSegment(CircuitExercise)
     var id: String {
         switch self {
-        case .editSegment(let segment): return "edit-\(segment.id)"
+        case .editSegment(let segment): return "edit-\(segment.persistentModelID)"
         }
     }
 }
@@ -41,12 +41,16 @@ struct CircuitDetailView: View {
     
     @State private var uiSegments: [CircuitExercise] = []
     @State private var showLogConfirmation = false
+    @State private var showIncompleteAlert = false
     @State private var originalName: String = ""
+    
+    // LOGIKK FOR ØKT-STATUS
+    @State private var sessionStartTime: Date? = nil
+    @State private var isSessionStarted = false
+    @State private var completedSegmentIds: Set<PersistentIdentifier> = []
     
     let columns = [GridItem(.adaptive(minimum: 110), spacing: 16)]
     let currentTheme: AppTheme = .standard
-    
-    // Endring 1: Redusert høyden på skuffen betraktelig (var 380)
     let pickerHeight: CGFloat = 280
     
     var body: some View {
@@ -76,11 +80,6 @@ struct CircuitDetailView: View {
                                 .font(.title2.bold())
                                 .multilineTextAlignment(.center)
                                 .submitLabel(.done)
-                                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { obj in
-                                    if let textField = obj.object as? UITextField {
-                                        textField.selectAll(nil)
-                                    }
-                                }
                             Spacer()
                             Color.clear.frame(width: 60, height: 44)
                         }
@@ -89,7 +88,26 @@ struct CircuitDetailView: View {
                         .background(Color(.systemBackground))
                         .zIndex(1)
                         
-                        // 2. HOVEDINNHOLD
+                        // 2. MODULÆR ACTION-KNAPP
+                        if !routine.segments.isEmpty {
+                            Button(action: handleMainButtonAction) {
+                                HStack {
+                                    Image(systemName: isSessionStarted ? "checkmark.circle.fill" : "play.circle.fill")
+                                    Text(isSessionStarted ? "LOGG ØKT" : "START ØKT")
+                                }
+                                .font(.headline)
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(isSessionStarted ? Color.green : Color.blue)
+                                .cornerRadius(12)
+                                .shadow(radius: 3)
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 10)
+                        }
+                        
+                        // 3. HOVEDINNHOLD
                         ScrollView {
                             VStack(alignment: .leading, spacing: 20) {
                                 LazyVGrid(columns: columns, spacing: 24) {
@@ -99,8 +117,10 @@ struct CircuitDetailView: View {
                                             isLast: index == uiSegments.count - 1,
                                             theme: currentTheme,
                                             draggingSegment: $draggingSegment,
-                                            onEdit: { activeDrawer = .editSegment(segment) }
-                                            
+                                            onEdit: {
+                                                markSegmentAsVisited(segment)
+                                                activeDrawer = .editSegment(segment)
+                                            }
                                         )
                                         .onDrop(of: [.text], delegate: GridDropDelegate(
                                             item: segment,
@@ -121,26 +141,8 @@ struct CircuitDetailView: View {
                                 }
                                 .padding(.horizontal)
                                 .padding(.bottom, 120)
-                                .padding(.top, 20)
+                                .padding(.top, 10)
                             }
-                        }
-                    }
-                    
-                    // --- LOGG KNAPP ---
-                    if !routine.segments.isEmpty {
-                        Button(action: logWorkout) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text("LOGG ØKT")
-                            }
-                            .font(.headline)
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .cornerRadius(12)
-                            .padding()
-                            .shadow(radius: 5)
                         }
                     }
                 }
@@ -173,7 +175,7 @@ struct CircuitDetailView: View {
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     
                                     let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
-                                    showStopwatchMode = isTime // Default til stopwatch for tid
+                                    showStopwatchMode = isTime
                                     
                                     withAnimation(.snappy) {
                                         activePicker = PickerState(title: title, binding: binding, range: range, step: step)
@@ -183,6 +185,7 @@ struct CircuitDetailView: View {
                                     withAnimation(.snappy) { activePicker = nil }
                                 },
                                 onSwitchSegment: { newSegment in
+                                    markSegmentAsVisited(newSegment)
                                     activeDrawer = .editSegment(newSegment)
                                 }
                             )
@@ -195,19 +198,13 @@ struct CircuitDetailView: View {
                 // --- PICKER / STOPWATCH SKUFF ---
                 if let pickerState = activePicker {
                     DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                        
-                        // Endring 2: Endret alignment til bottomTrailing for toggle-knappen
                         ZStack(alignment: .bottomTrailing) {
-                            
-                            // 1. HOVEDINNHOLD (Sentrert)
                             VStack {
                                 Spacer()
                                 if pickerState.isTimePicker && showStopwatchMode {
-                                    // MODUS A: Stoppeklokke (Rund og sentrert)
                                     StopwatchView(bindingTime: pickerState.binding)
                                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                                 } else {
-                                    // MODUS B: Linjal (Ruler)
                                     VerticalRuler(
                                         value: pickerState.binding,
                                         range: pickerState.range,
@@ -220,7 +217,6 @@ struct CircuitDetailView: View {
                             .frame(maxWidth: .infinity)
                             .animation(.snappy(duration: 0.3), value: showStopwatchMode)
                             
-                            // 2. TOGGLE KNAPP (Nede til HØYRE og RUND)
                             if pickerState.isTimePicker {
                                 Button(action: {
                                     withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -228,14 +224,9 @@ struct CircuitDetailView: View {
                                     }
                                 }) {
                                     ZStack {
-                                        Circle()
-                                            .fill(Color(.secondarySystemFill))
-                                            .shadow(radius: 2)
-                                        
-                                        // Viser motsatt ikon av hva du ser
+                                        Circle().fill(Color(.secondarySystemFill)).shadow(radius: 2)
                                         Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
-                                            .font(.title2)
-                                            .foregroundStyle(.primary)
+                                            .font(.title2).foregroundStyle(.primary)
                                     }
                                     .frame(width: 50, height: 50)
                                 }
@@ -252,6 +243,22 @@ struct CircuitDetailView: View {
         .onAppear {
             refreshUILoad()
             if originalName.isEmpty { originalName = routine.name }
+            
+            // --- ENDRING: Reset tid ved åpning av økt ---
+            if !isSessionStarted {
+                for segment in routine.segments {
+                    segment.durationSeconds = 0
+                }
+            }
+            // ------------------------------------------
+        }
+        .alert("Ufullstendig økt?", isPresented: $showIncompleteAlert) {
+            Button("Logg likevel", role: .none) {
+                performLogging()
+            }
+            Button("Avbryt", role: .cancel) { }
+        } message: {
+            Text("Du har ikke vært gjennom alle øvelsene. Vil du lagre økten nå eller fortsette?")
         }
         .alert("Økt logget!", isPresented: $showLogConfirmation) {
             Button("OK", role: .cancel) { dismiss() }
@@ -262,32 +269,46 @@ struct CircuitDetailView: View {
     
     // --- FUNKSJONER ---
     
-    func addSegment() {
-        let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
-        let nextNumber = routine.segments.count + 1
-        let autoName = "Øvelse \(nextNumber)"
-        
-        let newSegment = CircuitExercise(
-            name: autoName,
-            durationSeconds: lastSegment?.durationSeconds ?? 45,
-            targetReps: lastSegment?.targetReps ?? 10,
-            weight: lastSegment?.weight ?? 0.0,
-            distance: lastSegment?.distance ?? 0.0,
-            category: lastSegment?.category ?? .strength,
-            note: "",
-            sortIndex: routine.segments.count
-        )
-        
-        modelContext.insert(newSegment)
-        routine.segments.append(newSegment)
-        
-        withAnimation(.snappy) {
-            activeDrawer = .editSegment(newSegment)
+    func handleMainButtonAction() {
+        if !isSessionStarted {
+            startSession()
+        } else {
+            attemptLogWorkout()
         }
     }
     
-    private func logWorkout() {
-        let log = WorkoutLog(routineName: routine.name, date: Date())
+    func startSession() {
+        sessionStartTime = Date()
+        isSessionStarted = true
+        
+        if let firstSegment = uiSegments.first {
+            markSegmentAsVisited(firstSegment)
+            withAnimation(.snappy) {
+                activeDrawer = .editSegment(firstSegment)
+            }
+        }
+    }
+    
+    func attemptLogWorkout() {
+        let allVisited = uiSegments.allSatisfy { completedSegmentIds.contains($0.persistentModelID) }
+        
+        if allVisited {
+            performLogging()
+        } else {
+            showIncompleteAlert = true
+        }
+    }
+    
+    func markSegmentAsVisited(_ segment: CircuitExercise) {
+        completedSegmentIds.insert(segment.persistentModelID)
+    }
+    
+    func performLogging() {
+        let startTime = sessionStartTime ?? Date()
+        let elapsedSeconds = Int(Date().timeIntervalSince(startTime))
+        
+        let log = WorkoutLog(routineName: routine.name, date: Date(), totalDuration: elapsedSeconds)
+        
         for segment in uiSegments {
             let loggedExercise = LoggedExercise(
                 name: segment.name,
@@ -301,8 +322,45 @@ struct CircuitDetailView: View {
             log.exercises.append(loggedExercise)
         }
         modelContext.insert(log)
+        
+        // --- ENDRING: Reset tid og status etter logging ---
+        for segment in routine.segments {
+            segment.durationSeconds = 0
+        }
+        
+        // Reset status for økten
+        isSessionStarted = false
+        sessionStartTime = nil
+        completedSegmentIds.removeAll()
+        // ------------------------------------------------
+        
         try? modelContext.save()
         showLogConfirmation = true
+    }
+    
+    func addSegment() {
+        let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last
+        let nextNumber = routine.segments.count + 1
+        let autoName = "Øvelse \(nextNumber)"
+        
+        let newSegment = CircuitExercise(
+            name: autoName,
+            durationSeconds: 0, // Starter på 0
+            targetReps: lastSegment?.targetReps ?? 10,
+            weight: lastSegment?.weight ?? 0.0,
+            distance: lastSegment?.distance ?? 0.0,
+            category: lastSegment?.category ?? .strength,
+            note: "",
+            sortIndex: routine.segments.count
+        )
+        
+        modelContext.insert(newSegment)
+        routine.segments.append(newSegment)
+        
+        markSegmentAsVisited(newSegment)
+        withAnimation(.snappy) {
+            activeDrawer = .editSegment(newSegment)
+        }
     }
     
     private func closeAllPanels() {
@@ -325,18 +383,17 @@ struct CircuitDetailView: View {
     }
 }
 
-// --- STOPPEKLOKKE VISNING ---
+// --- HJELPEKOMPONENTER ---
+// (Disse er uendret, men inkludert for å være sikker på at alt fungerer sammen)
+
 struct StopwatchView: View {
     @Binding var bindingTime: Int
-    
     @State private var elapsedTime: Double = 0.0
     @State private var isRunning = false
-    
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         VStack {
-            // Endring 3: Mindre sirkel (190pt)
             Button(action: toggleStopwatch) {
                 ZStack {
                     Circle()
@@ -352,7 +409,7 @@ struct StopwatchView: View {
                     
                     VStack(spacing: 5) {
                         Text(formatDetailedTime(elapsedTime))
-                            .font(.system(size: 48, weight: .bold, design: .rounded)) // Litt mindre font
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
                             .monospacedDigit()
                             .contentTransition(.numericText(value: elapsedTime))
@@ -362,30 +419,22 @@ struct StopwatchView: View {
                             .foregroundStyle(.white.opacity(0.9))
                     }
                 }
-                .frame(width: 190, height: 190) // Redusert størrelse
+                .frame(width: 190, height: 190)
             }
             .buttonStyle(ScaleButtonStyle())
         }
-        .onAppear {
-            elapsedTime = Double(bindingTime)
-        }
+        // Starter alltid på 0 når viewet vises for å ta ny tid
+        .onAppear { elapsedTime = 0.0 }
         .onReceive(timer) { _ in
             guard isRunning else { return }
             elapsedTime += 0.1
-            
-            if Int(elapsedTime) != bindingTime {
-                bindingTime = Int(elapsedTime)
-            }
+            if Int(elapsedTime) != bindingTime { bindingTime = Int(elapsedTime) }
         }
-        .onDisappear {
-            isRunning = false
-        }
+        .onDisappear { isRunning = false }
     }
     
     func toggleStopwatch() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            isRunning.toggle()
-        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { isRunning.toggle() }
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
@@ -397,8 +446,6 @@ struct StopwatchView: View {
         return String(format: "%d:%02d", m, s)
     }
 }
-
-// --- HJELPEKOMPONENTER ---
 
 struct DraggableSegmentView: View {
     var segment: CircuitExercise
@@ -517,16 +564,6 @@ func segmentDescription(for segment: CircuitExercise) -> String {
     return linjer.isEmpty ? "-" : linjer.joined(separator: "\n")
 }
 
-func formatTid(_ sekunder: Int) -> String {
-    if sekunder >= 60 {
-        let min = sekunder / 60
-        let sek = sekunder % 60
-        return String(format: "%d:%02d min", min, sek)
-    } else {
-        return "\(sekunder) sek"
-    }
-}
-
 func iconForSegment(_ segment: CircuitExercise) -> String? {
     switch segment.category { case .strength: return "dumbbell.fill"; case .cardio: return "figure.run"; case .combined: return "figure.strengthtraining.functional"; case .other: return "timer" }
 }
@@ -537,8 +574,6 @@ struct VerticalRuler: View {
     let step: Int
     
     private let itemHeight: CGFloat = 40
-    
-    // Endring 4: Justert høyden på ruleren internt (var 250)
     private let rulerHeight: CGFloat = 200
     
     @State private var dragOffset: CGFloat = 0
