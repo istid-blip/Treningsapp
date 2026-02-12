@@ -187,6 +187,37 @@ struct CircuitDetailView: View {
                                 onSwitchSegment: { newSegment in
                                     markSegmentAsVisited(newSegment)
                                     activeDrawer = .editSegment(newSegment)
+                                    
+                                    // Hvis vi allerede har en picker/stoppeklokke åpen, bytt til den nye øvelsen
+                                    if let current = activePicker {
+                                        // Finn ut hva vi skal binde mot (Tid, reps, etc.)
+                                        var newBinding: Binding<Int>?
+                                        
+                                        if current.isTimePicker {
+                                            newSegment.durationSeconds = 0 // Nullstiller data-verdien
+                                            newBinding = Binding(get: { newSegment.durationSeconds }, set: { newSegment.durationSeconds = $0 })
+                                        } else if current.title.contains("reps") {
+                                            newBinding = Binding(get: { newSegment.targetReps }, set: { newSegment.targetReps = $0 })
+                                        } else if current.title.contains("Vekt") || current.title.contains("kg") {
+                                            newBinding = Binding(get: { Int(newSegment.weight) }, set: { newSegment.weight = Double($0) })
+                                        } else if current.title.contains("Meter") {
+                                            newBinding = Binding(get: { Int(newSegment.distance) }, set: { newSegment.distance = Double($0) })
+                                        }
+                                        
+                                        // Opprett en NY PickerState. Dette genererer en ny unik ID som trigger nullstillingen!
+                                        if let binding = newBinding {
+                                            withAnimation(.snappy) {
+                                                activePicker = PickerState(
+                                                    title: current.title,
+                                                    binding: binding,
+                                                    range: current.range,
+                                                    step: current.step
+                                                )
+                                            }
+                                        } else {
+                                            activePicker = nil // Lukk hvis kategorien ikke passer lenger
+                                        }
+                                    }
                                 }
                             )
                         }
