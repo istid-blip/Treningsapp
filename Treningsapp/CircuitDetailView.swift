@@ -167,59 +167,37 @@ struct CircuitDetailView: View {
                     DrawerView(theme: currentTheme, edge: .top, maxHeight: availableHeight) {
                         switch drawerState {
                         case .editSegment(let segment):
-                            AddSegmentView(
-                                routine: routine,
-                                segmentToEdit: segment,
-                                onDismiss: { closeAllPanels() },
-                                onRequestPicker: { title, binding, range, step in
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                    
-                                    let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
-                                    showStopwatchMode = isTime
-                                    
-                                    withAnimation(.snappy) {
-                                        activePicker = PickerState(title: title, binding: binding, range: range, step: step)
-                                    }
-                                },
-                                onTyping: {
-                                    withAnimation(.snappy) { activePicker = nil }
-                                },
-                                onSwitchSegment: { newSegment in
-                                    markSegmentAsVisited(newSegment)
-                                    activeDrawer = .editSegment(newSegment)
-                                    
-                                    // Hvis vi allerede har en picker/stoppeklokke åpen, bytt til den nye øvelsen
-                                    if let current = activePicker {
-                                        // Finn ut hva vi skal binde mot (Tid, reps, etc.)
-                                        var newBinding: Binding<Int>?
-                                        
-                                        if current.isTimePicker {
-                                            newSegment.durationSeconds = 0 // Nullstiller data-verdien
-                                            newBinding = Binding(get: { newSegment.durationSeconds }, set: { newSegment.durationSeconds = $0 })
-                                        } else if current.title.contains("reps") {
-                                            newBinding = Binding(get: { newSegment.targetReps }, set: { newSegment.targetReps = $0 })
-                                        } else if current.title.contains("Vekt") || current.title.contains("kg") {
-                                            newBinding = Binding(get: { Int(newSegment.weight) }, set: { newSegment.weight = Double($0) })
-                                        } else if current.title.contains("Meter") {
-                                            newBinding = Binding(get: { Int(newSegment.distance) }, set: { newSegment.distance = Double($0) })
-                                        }
-                                        
-                                        // Opprett en NY PickerState. Dette genererer en ny unik ID som trigger nullstillingen!
-                                        if let binding = newBinding {
-                                            withAnimation(.snappy) {
-                                                activePicker = PickerState(
-                                                    title: current.title,
-                                                    binding: binding,
-                                                    range: current.range,
-                                                    step: current.step
-                                                )
-                                            }
-                                        } else {
-                                            activePicker = nil // Lukk hvis kategorien ikke passer lenger
-                                        }
-                                    }
-                                }
-                            )
+                                                    AddSegmentView(
+                                                        routine: routine,
+                                                        segmentToEdit: segment,
+                                                        currentActiveField: activePicker?.title,
+                                                        onDismiss: { closeAllPanels() },
+                                                        onRequestPicker: { title, binding, range, step in
+                                                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                                            
+                                                            let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
+                                                            showStopwatchMode = isTime
+                                                            
+                                                            withAnimation(.snappy) {
+                                                                activePicker = PickerState(title: title, binding: binding, range: range, step: step)
+                                                            }
+                                                        },
+                                                        onTyping: {
+                                                            withAnimation(.snappy) { activePicker = nil }
+                                                        },
+                                                        onSwitchSegment: { newSegment in
+                                                            markSegmentAsVisited(newSegment)
+                                                            activeDrawer = .editSegment(newSegment)
+                                                            
+                                                            // --- KORRIGERT LOGIKK HER ---
+                                                            // Vi nullstiller KUN tiden hvis økten IKKE er startet.
+                                                            // Er økten i gang (isSessionStarted == true), lar vi tiden stå
+                                                            // slik at du kan fortsette der du slapp.
+                                                            if activePicker?.isTimePicker == true && !isSessionStarted {
+                                                                newSegment.durationSeconds = 0
+                                                            }
+                                                        }
+                                                    )
                         }
                     }
                     .zIndex(11)
@@ -233,7 +211,8 @@ struct CircuitDetailView: View {
                             VStack {
                                 Spacer()
                                 if pickerState.isTimePicker && showStopwatchMode {
-                                    StopwatchView(bindingTime: pickerState.binding)
+                                    StopwatchView(bindingTime: pickerState.binding, allowResuming: isSessionStarted) // <--- ENDRET HER
+                                        .id(pickerState.id)
                                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                                 } else {
                                     VerticalRuler(
@@ -275,13 +254,11 @@ struct CircuitDetailView: View {
             refreshUILoad()
             if originalName.isEmpty { originalName = routine.name }
             
-            // --- ENDRING: Reset tid ved åpning av økt ---
             if !isSessionStarted {
                 for segment in routine.segments {
                     segment.durationSeconds = 0
                 }
             }
-            // ------------------------------------------
         }
         .alert("Ufullstendig økt?", isPresented: $showIncompleteAlert) {
             Button("Logg likevel", role: .none) {
@@ -340,7 +317,6 @@ struct CircuitDetailView: View {
         
         let log = WorkoutLog(routineName: routine.name, date: Date(), totalDuration: elapsedSeconds)
         
-        // --- ENDRET HER: Bruker enumerated() for å få med indeksen til sortering ---
         for (index, segment) in uiSegments.enumerated() {
             let loggedExercise = LoggedExercise(
                 name: segment.name,
@@ -350,23 +326,20 @@ struct CircuitDetailView: View {
                 weight: segment.weight,
                 distance: segment.distance,
                 note: segment.note,
-                sortIndex: index // Lagrer rekkefølgen
+                sortIndex: index
             )
             log.exercises.append(loggedExercise)
         }
         
         modelContext.insert(log)
         
-        // --- ENDRING: Reset tid og status etter logging ---
         for segment in routine.segments {
             segment.durationSeconds = 0
         }
         
-        // Reset status for økten
         isSessionStarted = false
         sessionStartTime = nil
         completedSegmentIds.removeAll()
-        // ------------------------------------------------
         
         try? modelContext.save()
         showLogConfirmation = true
@@ -379,7 +352,7 @@ struct CircuitDetailView: View {
         
         let newSegment = CircuitExercise(
             name: autoName,
-            durationSeconds: 0, // Starter på 0
+            durationSeconds: 0,
             targetReps: lastSegment?.targetReps ?? 10,
             weight: lastSegment?.weight ?? 0.0,
             distance: lastSegment?.distance ?? 0.0,
@@ -418,10 +391,12 @@ struct CircuitDetailView: View {
 }
 
 // --- HJELPEKOMPONENTER ---
-// (Disse er uendret, men inkludert for å være sikker på at alt fungerer sammen)
 
 struct StopwatchView: View {
     @Binding var bindingTime: Int
+    // Default true slik at den fungerer som før i historikk-visninger o.l.
+    var allowResuming: Bool = true
+    
     @State private var elapsedTime: Double = 0.0
     @State private var isRunning = false
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -457,11 +432,29 @@ struct StopwatchView: View {
             }
             .buttonStyle(ScaleButtonStyle())
         }
-        // Starter alltid på 0 når viewet vises for å ta ny tid
-        .onAppear { elapsedTime = 0.0 }
+        .onAppear {
+            if allowResuming {
+                // Økt er i gang: Hent frem lagret tid
+                elapsedTime = Double(bindingTime)
+            } else {
+                // Økt er IKKE i gang: Nullstill alltid til 0
+                elapsedTime = 0.0
+                if bindingTime != 0 {
+                    bindingTime = 0
+                }
+            }
+        }
+        .onChange(of: bindingTime) { _, newValue in
+            // Sikkerhetsmekanisme hvis tiden nullstilles utenfra (f.eks. ved bytte av segment)
+            if newValue == 0 {
+                isRunning = false
+                elapsedTime = 0.0
+            }
+        }
         .onReceive(timer) { _ in
             guard isRunning else { return }
             elapsedTime += 0.1
+            // Oppdaterer bindingen kontinuerlig mens klokka går
             if Int(elapsedTime) != bindingTime { bindingTime = Int(elapsedTime) }
         }
         .onDisappear { isRunning = false }

@@ -19,6 +19,9 @@ struct AddSegmentView: View {
     var log: WorkoutLog?
     var logEntryToEdit: LoggedExercise?
     
+    // Hvilket felt er aktivt?
+    var currentActiveField: String? = nil
+    
     var onDismiss: () -> Void
     var onRequestPicker: (String, Binding<Int>, ClosedRange<Int>, Int) -> Void
     var onTyping: () -> Void
@@ -59,8 +62,9 @@ struct AddSegmentView: View {
     
     // --- Navigasjon Logg ---
     private var sortedLogEntries: [LoggedExercise] {
-        log?.exercises ?? []
-    }
+            // Endret: Sorter på sortIndex slik at pilene følger listen i LogDetailView
+            log?.exercises.sorted { $0.sortIndex < $1.sortIndex } ?? []
+        }
     private var previousLogEntry: LoggedExercise? {
         guard let current = logEntryToEdit, let index = sortedLogEntries.firstIndex(of: current) else { return nil }
         return index > 0 ? sortedLogEntries[index - 1] : nil
@@ -104,6 +108,7 @@ struct AddSegmentView: View {
         .onChange(of: segmentToEdit) { _, _ in loadData() }
         .onChange(of: logEntryToEdit) { _, _ in loadData() }
         
+        // Oppdatering av modell når lokale verdier endres
         .onChange(of: duration) { _, _ in updateSegment() }
         .onChange(of: targetReps) { _, _ in updateSegment() }
         .onChange(of: weight) { _, _ in updateSegment() }
@@ -122,7 +127,7 @@ struct AddSegmentView: View {
         }
     }
     
-    // --- VIEW COMPONENTS (Splittet opp for å hjelpe kompilatoren) ---
+    // --- VIEW COMPONENTS ---
     
     var nameInputSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -333,7 +338,9 @@ struct AddSegmentView: View {
             targetReps = segment.targetReps
             weight = segment.weight
             distance = segment.distance
-            activeField = nil
+            
+            updateActiveFieldFromParent()
+            
         } else if let logEntry = logEntryToEdit {
             name = logEntry.name
             selectedCategory = logEntry.category
@@ -342,7 +349,58 @@ struct AddSegmentView: View {
             targetReps = logEntry.targetReps
             weight = logEntry.weight
             distance = logEntry.distance
+            
+            updateActiveFieldFromParent()
+        }
+    }
+    
+    func updateActiveFieldFromParent() {
+        if let field = currentActiveField {
+            // Sett aktivt felt basert på hva forelderen sier
+            if field.localizedCaseInsensitiveContains("tid") || field.localizedCaseInsensitiveContains("sek") {
+                activeField = .time
+            } else if field.localizedCaseInsensitiveContains("reps") {
+                activeField = .reps
+            } else if field.localizedCaseInsensitiveContains("vekt") || field.localizedCaseInsensitiveContains("kg") {
+                activeField = .weight
+            } else if field.localizedCaseInsensitiveContains("meter") {
+                activeField = .distance
+            }
+            
+            // --- VIKTIG: KOBLE OPP PICKEREN AUTOMATISK ---
+            // Dette sørger for at stoppeklokken/linjalen faktisk styrer DENNE øvelsen
+            // uten at du må trykke på knappen igjen.
+            if let activeField = activeField {
+                DispatchQueue.main.async {
+                    restoreActivePickerBinding(for: activeField)
+                }
+            }
+            // ---------------------------------------------
+        } else {
             activeField = nil
+        }
+    }
+    
+    func restoreActivePickerBinding(for field: ActiveField) {
+        switch field {
+        case .time:
+            onRequestPicker("Tid", $duration, 0...3600, 5)
+        case .reps:
+            onRequestPicker("Antall reps", $targetReps, 1...100, 1)
+        case .weight:
+            let weightBinding = Binding<Int>(
+                get: { Int(weight) },
+                set: { weight = Double($0) }
+            )
+            onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+        case .distance:
+            let distBinding = Binding<Int>(
+                get: { Int(distance) },
+                set: { distance = Double($0) }
+            )
+            onRequestPicker("Meter", distBinding, 0...10000, 50)
+        default:
+            break
         }
     }
     
@@ -409,7 +467,7 @@ struct AddSegmentView: View {
     }
 }
 
-// --- HJELPE-STRUCTS (DISSE MANGLER I FORRIGE VERSJON) ---
+// --- HJELPE-STRUCTS ---
 
 struct CompactInputCell: View {
     let value: String
