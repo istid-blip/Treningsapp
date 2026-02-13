@@ -30,6 +30,22 @@ struct AddSegmentView: View {
     var onSwitchSegment: ((CircuitExercise) -> Void)?
     var onSwitchLogEntry: ((LoggedExercise) -> Void)?
     
+    // Henter alle rutiner for å finne tidligere brukte øvelsesnavn
+        @Query var allRoutines: [CircuitRoutine]
+
+        // En hardkodet liste med "fabrikk-øvelser" og deres standardkategori
+    private let standardExercises: [(name: String, category: ExerciseCategory)] = [
+            ("Knebøy", .strength), ("Benkpress", .strength), ("Markløft", .strength),
+            ("Pushups", .strength), ("Pullups", .strength), ("Utfall", .strength),
+            ("Skulderpress", .strength), ("Militærpress", .strength),
+            ("Løping", .cardio), ("Intervaller", .cardio), ("Sykling", .cardio),
+            ("Roing", .cardio),
+            ("Planken", .combined), ("Situps", .combined), ("Rygghev", .combined),
+            ("Yoga", .combined), ("Uttøying", .combined), ("Balansebrett", .combined),
+            ("Pause", .other)
+        ]
+    
+    
     @State private var name = ""
     @State private var selectedCategory: ExerciseCategory = .strength
     @State private var note = ""
@@ -130,63 +146,152 @@ struct AddSegmentView: View {
     // --- VIEW COMPONENTS ---
     
     var nameInputSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Øvelsesnavn")
-                .font(.caption).foregroundStyle(.secondary)
-            
-            HStack(spacing: 12) {
-                // VENSTRE PIL
-                Button(action: {
-                    if let prev = previousSegment { onSwitchSegment?(prev) }
-                    else if let prevLog = previousLogEntry { onSwitchLogEntry?(prevLog) }
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.title3.bold())
-                        .foregroundStyle(canGoBack ? Color.primary : Color.secondary.opacity(0.3))
-                        .frame(width: 44, height: 44)
-                        .background(Color(.secondarySystemFill))
-                        .clipShape(Circle())
-                }
-                .disabled(!canGoBack)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Øvelsesnavn")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.leading, 4) // Justerer label litt inn
                 
-                // TEKSTFELT
-                TextField("F.eks. Pause eller Knebøy", text: $name)
-                    .font(.title3)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(activeField == .name ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(activeField == .name ? Color.accentColor : Color.clear, lineWidth: 2)
-                    )
-                    .focused($isNameFocused)
-                    .submitLabel(.done)
-                    .onChange(of: name) { _, _ in updateSegment() }
-                    .onChange(of: isNameFocused) { _, focused in
-                        if focused {
-                            onTyping()
-                            activeField = .name
+                // Container for input + dropdown
+                ZStack(alignment: .top) {
+                    
+                    // --- SELVE INPUT-RADEN (Piler + Felt) ---
+                    HStack(spacing: 12) {
+                        // VENSTRE PIL
+                        Button(action: {
+                            if let prev = previousSegment { onSwitchSegment?(prev) }
+                            else if let prevLog = previousLogEntry { onSwitchLogEntry?(prevLog) }
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.headline)
+                                .foregroundStyle(canGoBack ? Color.primary : Color.secondary.opacity(0.3))
+                                .frame(width: 44, height: 44)
+                                .background(Color(.secondarySystemFill))
+                                .clipShape(Circle())
                         }
+                        .disabled(!canGoBack)
+                        
+                        // TEKSTFELTET
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                            
+                            TextField("F.eks. Knebøy", text: $name)
+                                .font(.body) // Litt strammere font
+                                .submitLabel(.done)
+                                .focused($isNameFocused)
+                                .onChange(of: name) { _, _ in updateSegment() }
+                                .onChange(of: isNameFocused) { _, focused in
+                                    if focused {
+                                        onTyping()
+                                        activeField = .name
+                                    }
+                                }
+                            
+                            if !name.isEmpty && isNameFocused {
+                                Button(action: { name = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(activeField == .name ? Color.accentColor : Color.clear, lineWidth: 2)
+                        )
+                        
+                        // HØYRE PIL
+                        Button(action: {
+                            if let next = nextSegment { onSwitchSegment?(next) }
+                            else if let nextLog = nextLogEntry { onSwitchLogEntry?(nextLog) }
+                        }) {
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundStyle(canGoForward ? Color.primary : Color.secondary.opacity(0.3))
+                                .frame(width: 44, height: 44)
+                                .background(Color(.secondarySystemFill))
+                                .clipShape(Circle())
+                        }
+                        .disabled(!canGoForward)
                     }
-                
-                // HØYRE PIL
-                Button(action: {
-                    if let next = nextSegment { onSwitchSegment?(next) }
-                    else if let nextLog = nextLogEntry { onSwitchLogEntry?(nextLog) }
-                }) {
-                    Image(systemName: "chevron.right")
-                        .font(.title3.bold())
-                        .foregroundStyle(canGoForward ? Color.primary : Color.secondary.opacity(0.3))
-                        .frame(width: 44, height: 44)
-                        .background(Color(.secondarySystemFill))
-                        .clipShape(Circle())
+                    .zIndex(2) // Sørger for at input-raden alltid er øverst
+                    
+                    // --- DEN NYE LEKRE LISTEN ---
+                    if isNameFocused && !exerciseSuggestions.isEmpty {
+                        VStack(spacing: 0) {
+                            // Usynlig spacer for å dytte listen ned under tekstfeltet
+                            // (44pt + litt margin)
+                            Color.clear.frame(height: 55)
+                            
+                            ScrollView {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(exerciseSuggestions, id: \.0) { suggestion in
+                                        Button(action: {
+                                            withAnimation(.snappy) {
+                                                name = suggestion.0
+                                                selectedCategory = suggestion.1
+                                                applySmartDefaults()
+                                                updateSegment()
+                                                isNameFocused = false
+                                                activeField = nil
+                                            }
+                                        }) {
+                                            HStack(spacing: 12) {
+                                                // Kategori-ikon
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(categoryColor(for: suggestion.1).opacity(0.15))
+                                                        .frame(width: 32, height: 32)
+                                                    
+                                                    Image(systemName: categoryIcon(for: suggestion.1))
+                                                        .font(.caption.bold())
+                                                        .foregroundStyle(categoryColor(for: suggestion.1))
+                                                }
+                                                
+                                                // Navn
+                                                Text(suggestion.0)
+                                                    .font(.body)
+                                                    .foregroundStyle(.primary)
+                                                
+                                                Spacer()
+                                                
+                                                // Kategori-tekst
+                                                Text(suggestion.1.rawValue)
+                                                    .font(.caption2.bold())
+                                                    .foregroundStyle(.secondary)
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(Color(.tertiarySystemFill))
+                                                    .clipShape(Capsule())
+                                            }
+                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 16)
+                                            .contentShape(Rectangle())
+                                        }
+                                        
+                                        if suggestion.0 != exerciseSuggestions.last?.0 {
+                                            Divider().padding(.leading, 60) // Indented divider
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .frame(maxHeight: 220) // Begrenser høyden
+                            .background(.regularMaterial) // Frosted glass effekt!
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            .padding(.horizontal, 56) // Samme bredde-justering som før for å matche feltet
+                        }
+                        .zIndex(10) // Ligger over alt annet
+                        .transition(.opacity.combined(with: .move(edge: .top)).animation(.snappy))
+                    }
                 }
-                .disabled(!canGoForward)
             }
+            .zIndex(100)
         }
-    }
     
     var categorySection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -329,6 +434,37 @@ struct AddSegmentView: View {
     var showTime: Bool { selectedCategory == .cardio || selectedCategory == .other || selectedCategory == .combined }
     var showDistance: Bool { selectedCategory == .cardio || selectedCategory == .combined }
     
+    var exerciseSuggestions: [(String, ExerciseCategory)] {
+            // 1. Samle alle navn fra tidligere rutiner
+            let historyNames = allRoutines.flatMap { $0.segments }.map { ($0.name, $0.category) }
+            
+            // 2. Slå sammen med standardlisten
+            let allSource = standardExercises + historyNames
+            
+            // 3. Fjern duplikater (vi bruker navn som nøkkel)
+            var unique = [String: ExerciseCategory]()
+            for item in allSource {
+                // Hvis navnet ikke finnes, eller vi overskriver med en standard, legg til.
+                // (Her prioriterer vi bare første treff for enkelhets skyld)
+                if unique[item.0] == nil {
+                    unique[item.0] = item.1
+                }
+            }
+            
+            let allUnique = unique.map { key, value in (key, value) }
+            
+            // 4. Filtrer basert på tekst input
+            if name.isEmpty {
+                // Hvis tomt felt: Vis alfabetisk liste (begrens antall for ytelse)
+                return allUnique.sorted { $0.0 < $1.0 }.prefix(20).map { $0 }
+            } else {
+                // Hvis bruker skriver: Vis treff som inneholder teksten
+                return allUnique
+                    .filter { $0.0.localizedCaseInsensitiveContains(name) }
+                    .sorted { $0.0 < $1.0 }
+            }
+        }
+    
     func loadData() {
         if let segment = segmentToEdit {
             name = segment.name
@@ -465,8 +601,27 @@ struct AddSegmentView: View {
             onDismiss()
         }
     }
+    
 }
-
+// Hjelper for å velge ikon til listen
+    private func categoryIcon(for category: ExerciseCategory) -> String {
+        switch category {
+        case .strength: return "dumbbell.fill"
+        case .cardio: return "figure.run"
+        case .combined: return "figure.mind.and.body" // Passer fint for Yoga/Balanse/Core
+        case .other: return "star.fill"
+        }
+    }
+    
+// Hjelper for å velge farge til ikonet
+    private func categoryColor(for category: ExerciseCategory) -> Color {
+        switch category {
+        case .strength: return .blue
+        case .cardio: return .red
+        case .combined: return .purple // Lilla passer godt til "Combined/Yoga"
+        case .other: return .orange
+        }
+    }
 // --- HJELPE-STRUCTS ---
 
 struct CompactInputCell: View {
@@ -503,4 +658,5 @@ struct CompactInputCell: View {
         .buttonStyle(ScaleButtonStyle())
         .frame(maxWidth: .infinity)
     }
+    
 }
