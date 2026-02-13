@@ -340,7 +340,8 @@ struct CircuitDetailView: View {
         
         let log = WorkoutLog(routineName: routine.name, date: Date(), totalDuration: elapsedSeconds)
         
-        for segment in uiSegments {
+        // --- ENDRET HER: Bruker enumerated() for å få med indeksen til sortering ---
+        for (index, segment) in uiSegments.enumerated() {
             let loggedExercise = LoggedExercise(
                 name: segment.name,
                 categoryRawValue: segment.category.rawValue,
@@ -348,10 +349,12 @@ struct CircuitDetailView: View {
                 reps: segment.targetReps,
                 weight: segment.weight,
                 distance: segment.distance,
-                note: segment.note
+                note: segment.note,
+                sortIndex: index // Lagrer rekkefølgen
             )
             log.exercises.append(loggedExercise)
         }
+        
         modelContext.insert(log)
         
         // --- ENDRING: Reset tid og status etter logging ---

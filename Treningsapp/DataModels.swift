@@ -77,7 +77,7 @@ final class CircuitExercise {
 final class WorkoutLog {
     var routineName: String
     var date: Date
-    var totalDuration: Int = 0 // <--- NY: Lagrer total tid i sekunder
+    var totalDuration: Int = 0
     var wasEdited: Bool = false
     
     @Relationship(deleteRule: .cascade) var exercises: [LoggedExercise] = []
@@ -107,6 +107,9 @@ final class LoggedExercise {
     var distance: Double
     var note: String
     
+    // Nytt felt for sortering
+    var sortIndex: Int = 0
+    
     // Originale verdier (hvis endret i ettertid)
     var originalDuration: Int?
     var originalReps: Int?
@@ -122,7 +125,7 @@ final class LoggedExercise {
         ExerciseCategory(rawValue: categoryRawValue) ?? .strength
     }
     
-    init(name: String, categoryRawValue: String, duration: Int, reps: Int, weight: Double, distance: Double, note: String) {
+    init(name: String, categoryRawValue: String, duration: Int, reps: Int, weight: Double, distance: Double, note: String, sortIndex: Int = 0) {
         self.name = name
         self.categoryRawValue = categoryRawValue
         self.durationSeconds = duration
@@ -130,8 +133,10 @@ final class LoggedExercise {
         self.weight = weight
         self.distance = distance
         self.note = note
+        self.sortIndex = sortIndex
     }
 }
+
 func formatTid(_ sekunder: Int) -> String {
     if sekunder >= 60 {
         let min = sekunder / 60

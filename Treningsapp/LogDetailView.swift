@@ -95,7 +95,8 @@ struct LogDetailView: View {
                         }
                         
                         Section("Gjennomførte øvelser") {
-                            ForEach(log.exercises) { exercise in
+                            // --- ENDRET HER: Sorterer basert på sortIndex ---
+                            ForEach(log.exercises.sorted(by: { $0.sortIndex < $1.sortIndex })) { exercise in
                                 Button {
                                     // Åpne skuffen for redigering
                                     withAnimation(.snappy) {
