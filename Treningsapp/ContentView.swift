@@ -151,7 +151,7 @@ struct ContentView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSettings) {
-                SettingsSheet(maxCount: $numberOfRecentCards).presentationDetents([.fraction(0.3)])
+                SettingsView(maxCount: $numberOfRecentCards) // Fjernet .presentationDetents så den får full høyde (eller standard sheet)
             }
         }
     }
@@ -181,25 +181,7 @@ struct ContentView: View {
     }
 }
 
-struct SettingsSheet: View {
-    @Binding var maxCount: Int
-    @Environment(\.dismiss) var dismiss
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("Hjem-skjerm")) {
-                    Stepper(value: $maxCount, in: 1...7) {
-                        HStack { Text("Antall snarveier"); Spacer(); Text("\(maxCount)").bold().foregroundStyle(.secondary) }
-                    }
-                    Text("Velg mellom 4 og 7 snarveier.").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("Innstillinger")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Ferdig") { dismiss() } } }
-        }
-    }
-}
+
 
 struct HistoryRow: View {
     let log: WorkoutLog
