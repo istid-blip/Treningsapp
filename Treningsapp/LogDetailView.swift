@@ -303,14 +303,4 @@ struct LogDetailView: View {
                 .foregroundStyle(.secondary)
         }
     }
-    
-    func formatTid(_ sekunder: Int) -> String {
-        if sekunder >= 60 {
-            let min = sekunder / 60
-            let sek = sekunder % 60
-            return String(format: "%d:%02d min", min, sek)
-        } else {
-            return "\(sekunder) sek"
-        }
-    }
 }
