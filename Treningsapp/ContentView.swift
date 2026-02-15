@@ -13,8 +13,11 @@ struct ContentView: View {
     // Styrer navigering til økt
     @State private var routineToNavigate: CircuitRoutine?
     
-    // NYTT: Styrer skuffen for alle økter
+    // Styrer skuffen for alle økter
     @State private var showingAllRoutinesDrawer = false
+    
+    // Visningsmodus for historikk
+    @State private var historyViewMode: HistoryViewMode = .list
     
     let columns = [GridItem(.adaptive(minimum: 105), spacing: 10)]
     
@@ -24,9 +27,9 @@ struct ContentView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) { // ZStack lar oss legge skuffen oppå
+            ZStack(alignment: .top) {
                 
-                // --- HOVEDINNHOLD ---
+                // --- BAKGRUNN ---
                 Color(.systemGroupedBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
@@ -41,7 +44,7 @@ struct ContentView: View {
                     .padding(.horizontal).padding(.vertical, 10)
                     .background(Color(.systemGroupedBackground))
                     
-                    // ØKT-KORT
+                    // ØKT-KORT (Snarveier)
                     VStack {
                         LazyVGrid(columns: columns, spacing: 10) {
                             // A: NY ØKT
@@ -64,7 +67,7 @@ struct ContentView: View {
                                 }
                             }
                             
-                            // C: VIS ALLE (Åpner nå skuffen)
+                            // C: VIS ALLE
                             if routines.count > numberOfRecentCards {
                                 Button(action: { withAnimation(.snappy) { showingAllRoutinesDrawer = true } }) {
                                     VStack {
@@ -83,29 +86,56 @@ struct ContentView: View {
                     }
                     .background(Color(.systemGroupedBackground))
                     
-                    // HISTORIKK
+                    // --- HISTORIKK HEADER ---
                     HStack {
                         Text("Historikk").font(.title2).bold()
                         Spacer()
+                        
+                        // NY KNAPP: Skifter mellom liste og kalender
+                        Button(action: {
+                            withAnimation(.snappy) {
+                                historyViewMode = (historyViewMode == .list) ? .calendar : .list
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Text(historyViewMode == .list ? "Kalender" : "Liste")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Image(systemName: historyViewMode == .list ? "calendar" : "list.bullet")
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(15)
+                            .foregroundStyle(.blue)
+                        }
                     }
                     .padding(.horizontal).padding(.bottom, 5)
                     .background(Color(.systemGroupedBackground))
                     
-                    List {
-                        ForEach(logs) { log in
-                            HistoryRow(log: log)
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                                .padding(.vertical, 4)
+                    // --- HISTORIKK INNHOLD ---
+                    Group {
+                        if logs.isEmpty {
+                            ContentUnavailableView("Ingen økter ennå", systemImage: "dumbbell", description: Text("Gjennomfør en økt for å se den her."))
+                                .padding(.top, 40)
+                            Spacer()
+                        } else {
+                            switch historyViewMode {
+                            case .list:
+                                HistoryListView(logs: logs, onDelete: deleteLog)
+                                    .padding(.horizontal)
+                                    .transition(.move(edge: .leading))
+                            case .calendar:
+                                ScrollView {
+                                    HistoryCalendarView(logs: logs)
+                                        .padding(.bottom, 20)
+                                }
+                                .transition(.move(edge: .trailing))
+                            }
                         }
-                        .onDelete(perform: deleteLog)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal)
                 }
-                .disabled(showingAllRoutinesDrawer) // Deaktiver bakgrunn når skuffen er oppe
+                .disabled(showingAllRoutinesDrawer)
                 
                 // --- DIMMING BAKGRUNN ---
                 if showingAllRoutinesDrawer {
@@ -122,19 +152,13 @@ struct ContentView: View {
                 if showingAllRoutinesDrawer {
                     DrawerView(theme: .standard, edge: .top, maxHeight: 600) {
                         VStack(spacing: 0) {
-                            
                             Text("Alle økter")
                                 .font(.headline)
                                 .padding(.top, 20)
                                 .padding(.bottom, 10)
                             
-                            // Listen med økter (med select-funksjon)
                             AllRoutinesView(onSelect: { selectedRoutine in
-                                // Når en økt velges: Lukk skuffen og naviger
-                                withAnimation(.snappy) {
-                                    showingAllRoutinesDrawer = false
-                                }
-                                // Vent bittelitt så animasjonen ser pen ut før bytte
+                                withAnimation(.snappy) { showingAllRoutinesDrawer = false }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     routineToNavigate = selectedRoutine
                                 }
@@ -151,7 +175,7 @@ struct ContentView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSettings) {
-                SettingsView(maxCount: $numberOfRecentCards) // Fjernet .presentationDetents så den får full høyde (eller standard sheet)
+                SettingsView(maxCount: $numberOfRecentCards)
             }
         }
     }
@@ -181,8 +205,7 @@ struct ContentView: View {
     }
 }
 
-
-
+// HistoryRow gjenbrukes
 struct HistoryRow: View {
     let log: WorkoutLog
     var body: some View {
