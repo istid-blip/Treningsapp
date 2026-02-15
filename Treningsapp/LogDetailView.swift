@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 
-// Vi trenger en egen state for log-redigering siden den bruker LoggedExercise
 enum LogDrawerState: Identifiable {
     case editEntry(LoggedExercise)
     var id: String {
@@ -15,10 +14,14 @@ struct LogDetailView: View {
     let log: WorkoutLog
     @Environment(\.dismiss) var dismiss
     
-    // UI States for Skuffer (Drawers)
+    // UI States
     @State private var activeDrawer: LogDrawerState? = nil
     @State private var activePicker: PickerState? = nil
     @State private var showStopwatchMode = true
+    
+    // --- ENDRING START: Ny state for å styre statistikk-visning ---
+    @State private var statsExercise: LoggedExercise? = nil
+    // --- ENDRING SLUTT ---
     
     let currentTheme: AppTheme = .standard
     let pickerHeight: CGFloat = 280
@@ -29,28 +32,21 @@ struct LogDetailView: View {
                 
                 VStack(spacing: 0) {
                     
-                    // --- 1. CUSTOM HEADER ---
+                    // --- HEADER (Uendret) ---
                     HStack {
-                        Button(action: {
-                            dismiss()
-                        }) {
+                        Button(action: { dismiss() }) {
                             HStack(spacing: 5) {
                                 Image(systemName: "chevron.left").bold()
                                 Text("Tilbake")
                             }
                             .foregroundStyle(Color.blue)
                         }
-                        
                         Spacer()
-                        
                         Text("Oppsummering av \(log.routineName)")
                             .font(.headline)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
-                        
                         Spacer()
-                        
-                        // Balanserer tilbake-knappen for å sentrere tittelen
                         Color.clear.frame(width: 75, height: 44)
                     }
                     .padding(.horizontal)
@@ -58,34 +54,23 @@ struct LogDetailView: View {
                     .background(Color(.systemBackground))
                     .zIndex(1)
                     
-                    // --- 2. BAKGRUNNSINNHOLD (LISTEN) ---
+                    // --- LISTE ---
                     List {
                         Section {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack {
-                                    Text(log.routineName)
-                                        .font(.title)
-                                        .bold()
+                                    Text(log.routineName).font(.title).bold()
                                     Spacer()
                                     VStack {
-                                        Image(systemName: "calendar")
-                                            .font(.title2)
-                                            .foregroundStyle(.blue)
-                                        Text(log.date.formatted(.dateTime.day().month()))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        Image(systemName: "calendar").font(.title2).foregroundStyle(.blue)
+                                        Text(log.date.formatted(.dateTime.day().month())).font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
-                                
                                 if log.totalDuration > 0 {
                                     HStack(spacing: 6) {
-                                        Image(systemName: "clock")
-                                            .foregroundStyle(.gray)
-                                        Text("Total tid:")
-                                            .foregroundStyle(.secondary)
-                                        Text(formatTid(log.totalDuration))
-                                            .bold()
-                                            .foregroundStyle(.blue)
+                                        Image(systemName: "clock").foregroundStyle(.gray)
+                                        Text("Total tid:").foregroundStyle(.secondary)
+                                        Text(formatTid(log.totalDuration)).bold().foregroundStyle(.blue)
                                     }
                                     .font(.subheadline)
                                     .padding(.top, 2)
@@ -95,14 +80,11 @@ struct LogDetailView: View {
                         }
                         
                         Section("Gjennomførte øvelser") {
-                            // --- ENDRET HER: Sorterer basert på sortIndex ---
+                            // --- ENDRING START: Ny rad-design med to knapper ---
                             ForEach(log.exercises.sorted(by: { $0.sortIndex < $1.sortIndex })) { exercise in
-                                Button {
-                                    // Åpne skuffen for redigering
-                                    withAnimation(.snappy) {
-                                        activeDrawer = .editEntry(exercise)
-                                    }
-                                } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    
+                                    // 1. INFO DEL (Navn, kategori, detaljer)
                                     VStack(alignment: .leading, spacing: 6) {
                                         HStack {
                                             Text(exercise.name)
@@ -118,6 +100,7 @@ struct LogDetailView: View {
                                                 .clipShape(Capsule())
                                         }
                                         
+                                        // Detaljer (reps, vekt osv) med overstreking bevart
                                         HStack {
                                             detailView(for: exercise)
                                             
@@ -136,16 +119,55 @@ struct LogDetailView: View {
                                                 .italic()
                                         }
                                     }
-                                    .padding(.vertical, 4)
+                                    
+                                    // 2. KNAPPE-RAD (Statistikk & Juster)
+                                    HStack(spacing: 12) {
+                                        // Knapp 1: Statistikk
+                                        Button(action: {
+                                            statsExercise = exercise
+                                        }) {
+                                            HStack {
+                                                Image(systemName: "chart.xyaxis.line")
+                                                Text("Se fremgang")
+                                            }
+                                            .font(.caption).fontWeight(.medium)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(Color.blue.opacity(0.1))
+                                            .foregroundStyle(.blue)
+                                            .cornerRadius(8)
+                                        }
+                                        .buttonStyle(PlainButtonStyle()) // Hindrer at hele raden klikkes
+                                        
+                                        // Knapp 2: Juster / Rediger
+                                        Button(action: {
+                                            withAnimation(.snappy) {
+                                                activeDrawer = .editEntry(exercise)
+                                            }
+                                        }) {
+                                            HStack {
+                                                Image(systemName: "slider.horizontal.3")
+                                                Text("Juster")
+                                            }
+                                            .font(.caption).fontWeight(.medium)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(Color.orange.opacity(0.1))
+                                            .foregroundStyle(.orange)
+                                            .cornerRadius(8)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
                                 }
+                                .padding(.vertical, 6)
                             }
+                            // --- ENDRING SLUTT ---
                         }
                     }
-                    // Deaktiver interaksjon med listen hvis en skuff er åpen
                     .disabled(activeDrawer != nil || activePicker != nil)
                 }
                 
-                // --- DIMMING BAKGRUNN ---
+                // --- DIMMING & SKUFFER (Uendret logikk, men gjenbruker koden din) ---
                 if activeDrawer != nil || activePicker != nil {
                     Color.black.opacity(0.4)
                         .ignoresSafeArea()
@@ -154,7 +176,6 @@ struct LogDetailView: View {
                         .zIndex(10)
                 }
                 
-                // --- SKUFF 1: REDIGERING (AddSegmentView) ---
                 if let drawerState = activeDrawer {
                     let availableHeight = (activePicker != nil)
                     ? (geometry.size.height - pickerHeight)
@@ -170,26 +191,17 @@ struct LogDetailView: View {
                                 logEntryToEdit: entry,
                                 onDismiss: { closeAllPanels() },
                                 onRequestPicker: { title, binding, range, step in
-                                    // Skjul tastatur
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                    
                                     let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
                                     showStopwatchMode = isTime
-                                    
-                                    // Åpne linjal/stoppeklokke skuffen
                                     withAnimation(.snappy) {
                                         activePicker = PickerState(title: title, binding: binding, range: range, step: step)
                                     }
                                 },
-                                onTyping: {
-                                    // Skjul picker hvis man begynner å skrive tekst
-                                    withAnimation(.snappy) { activePicker = nil }
-                                },
+                                onTyping: { withAnimation(.snappy) { activePicker = nil } },
                                 onSwitchSegment: nil,
                                 onSwitchLogEntry: { newEntry in
-                                    withAnimation(.snappy) {
-                                        activeDrawer = .editEntry(newEntry)
-                                    }
+                                    withAnimation(.snappy) { activeDrawer = .editEntry(newEntry) }
                                 }
                             )
                         }
@@ -198,7 +210,6 @@ struct LogDetailView: View {
                     .ignoresSafeArea(.all, edges: .top)
                 }
                 
-                // --- SKUFF 2: PICKER / STOPPEKLOKKE ---
                 if let pickerState = activePicker {
                     DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
                         ZStack(alignment: .bottomTrailing) {
@@ -208,19 +219,14 @@ struct LogDetailView: View {
                                     StopwatchView(bindingTime: pickerState.binding)
                                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                                 } else {
-                                    VerticalRuler(
-                                        value: pickerState.binding,
-                                        range: pickerState.range,
-                                        step: pickerState.step
-                                    )
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                    VerticalRuler(value: pickerState.binding, range: pickerState.range, step: pickerState.step)
+                                        .transition(.move(edge: .bottom).combined(with: .opacity))
                                 }
                                 Spacer()
                             }
                             .frame(maxWidth: .infinity)
                             .animation(.snappy(duration: 0.3), value: showStopwatchMode)
                             
-                            // Knapp for å bytte mellom linjal og stoppeklokke
                             if pickerState.isTimePicker {
                                 Button(action: {
                                     withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -243,12 +249,15 @@ struct LogDetailView: View {
                 }
             }
         }
-        // Skjul den native navigasjonsbaren
         .toolbar(.hidden, for: .navigationBar)
+        // --- ENDRING START: Presenterer statistikk-arket ---
+        .sheet(item: $statsExercise) { exercise in
+            ExerciseStatsView(exerciseName: exercise.name, category: exercise.category)
+        }
+        // --- ENDRING SLUTT ---
     }
     
-    // --- HJELPEFUNKSJONER FOR VISNING ---
-    
+    // --- HJELPEFUNKSJONER (Uendret) ---
     func closeAllPanels() {
         withAnimation(.snappy) {
             activePicker = nil
@@ -268,14 +277,10 @@ struct LogDetailView: View {
             }
             if exercise.durationSeconds > 0 || exercise.originalDuration != nil {
                 if let orig = exercise.originalDuration {
-                    Text(formatTid(orig))
-                        .strikethrough()
-                        .foregroundStyle(.secondary)
-                    Text(formatTid(exercise.durationSeconds))
-                        .foregroundStyle(.blue)
+                    Text(formatTid(orig)).strikethrough().foregroundStyle(.secondary)
+                    Text(formatTid(exercise.durationSeconds)).foregroundStyle(.blue)
                 } else {
-                    Text(formatTid(exercise.durationSeconds))
-                        .foregroundStyle(.secondary)
+                    Text(formatTid(exercise.durationSeconds)).foregroundStyle(.secondary)
                 }
             }
             if exercise.distance > 0 || exercise.originalDistance != nil {
@@ -289,18 +294,12 @@ struct LogDetailView: View {
     func buildChangeText(original: Int?, current: Int, unit: String) -> some View {
         HStack(spacing: 4) {
             if let orig = original, orig != current {
-                Text("\(orig)")
-                    .strikethrough()
-                    .foregroundStyle(.secondary)
-                Text("\(current)")
-                    .bold()
-                    .foregroundStyle(.blue)
+                Text("\(orig)").strikethrough().foregroundStyle(.secondary)
+                Text("\(current)").bold().foregroundStyle(.blue)
             } else {
-                Text("\(current)")
-                    .foregroundStyle(.secondary)
+                Text("\(current)").foregroundStyle(.secondary)
             }
-            Text(unit)
-                .foregroundStyle(.secondary)
+            Text(unit).foregroundStyle(.secondary)
         }
     }
 }
