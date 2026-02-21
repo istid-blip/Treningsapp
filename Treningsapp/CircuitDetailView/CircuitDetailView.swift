@@ -13,11 +13,9 @@ struct CircuitDetailView: View {
     
     // UI States
     @State private var draggingSegment: CircuitExercise?
-    @State private var activeDrawer: DrawerState? = nil
-    @State private var activePicker: PickerState? = nil
     
-    // Styrer visning i tidsskuffen (Stoppeklokke vs Linjal)
-    @State private var showStopwatchMode = true
+    @Namespace private var segmentAnimation
+    @State private var segmentToNavigate: CircuitExercise?
     
     @State private var uiSegments: [CircuitExercise] = []
     @State private var showLogConfirmation = false
@@ -99,14 +97,21 @@ struct CircuitDetailView: View {
                                             theme: currentTheme,
                                             draggingSegment: $draggingSegment,
                                             onEdit: {
-                                                markSegmentAsVisited(segment)
-                                                // Hvis vi åpner et nytt segment manuelt, sjekk om vi skal stoppe andre timere
-                                                if !stopwatchManager.isRunning(segment) {
-                                                    stopwatchManager.stop()
+                                                // 1. Sett destinasjonen for navigering umiddelbart:
+                                                segmentToNavigate = segment
+                                                
+                                                // 2. Forsink andre oppdateringer med 0.1 sek, slik at SwiftUI
+                                                // rekker å registrere hvilket kort som skal forstørres:
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                    markSegmentAsVisited(segment)
+                                                    if !stopwatchManager.isRunning(segment) {
+                                                        stopwatchManager.stop()
+                                                    }
                                                 }
-                                                activeDrawer = .editSegment(segment)
                                             }
                                         )
+                                        // 3. LEGG TIL DENNE RETT ETTER DraggableSegmentView:
+                                        .matchedTransitionSource(id: segment.persistentModelID, in: segmentAnimation)
                                         .onDrop(of: [.text], delegate: GridDropDelegate(
                                             item: segment,
                                             items: $uiSegments,
@@ -131,120 +136,8 @@ struct CircuitDetailView: View {
                         }
                     }
                 }
-                .disabled(activeDrawer != nil || activePicker != nil)
                 .ignoresSafeArea(.keyboard)
                 
-                // --- DIMMING ---
-                if activeDrawer != nil || activePicker != nil {
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .onTapGesture { closeAllPanels() }
-                        .transition(.opacity)
-                        .zIndex(10)
-                }
-                
-                // --- HOVEDSKUFF (Add/Edit) ---
-                if let drawerState = activeDrawer {
-                    let availableHeight = (activePicker != nil)
-                    ? (geometry.size.height - pickerHeight)
-                    : (geometry.size.height + 60)
-                    
-                    DrawerView(theme: currentTheme, edge: .top, maxHeight: availableHeight) {
-                        switch drawerState {
-                        case .editSegment(let segment):
-                            AddSegmentView(
-                                routine: routine,
-                                segmentToEdit: segment,
-                                currentActiveField: activePicker?.title,
-                                onDismiss: { closeAllPanels() },
-                                onRequestPicker: { title, binding, range, step in
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                    
-                                    let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
-                                    showStopwatchMode = isTime
-                                    
-                                    withAnimation(.snappy) {
-                                        activePicker = PickerState(title: title, binding: binding, range: range, step: step)
-                                    }
-                                },
-                                onTyping: {
-                                    // Ved typing: Skjul picker, men la timer fortsette i bakgrunnen
-                                    withAnimation(.snappy) { activePicker = nil }
-                                },
-                                onSwitchSegment: { newSegment in
-                                    // Krav: Stopp klokken når vi bytter segment
-                                    stopwatchManager.stop()
-                                    
-                                    markSegmentAsVisited(newSegment)
-                                    activeDrawer = .editSegment(newSegment)
-                                    
-                                    if activePicker?.isTimePicker == true && !isSessionStarted {
-                                        newSegment.durationSeconds = 0
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .zIndex(11)
-                    .ignoresSafeArea(.all, edges: .top)
-                }
-                
-                // --- PICKER / STOPWATCH SKUFF ---
-                if let pickerState = activePicker {
-                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                        ZStack(alignment: .bottomTrailing) {
-                            VStack {
-                                Spacer()
-                                if pickerState.isTimePicker && showStopwatchMode {
-                                    
-                                    // Sjekk context for å koble til manager
-                                    if case .editSegment(let segment) = activeDrawer {
-                                        StopwatchView(
-                                            bindingTime: pickerState.binding,
-                                            allowResuming: isSessionStarted,
-                                            segment: segment,
-                                            manager: stopwatchManager
-                                        )
-                                        .id(pickerState.id)
-                                        .transition(.scale(scale: 0.8).combined(with: .opacity))
-                                    } else {
-                                        // Fallback
-                                        StopwatchView(bindingTime: pickerState.binding, allowResuming: isSessionStarted)
-                                    }
-                                    
-                                } else {
-                                    VerticalRuler(
-                                        value: pickerState.binding,
-                                        range: pickerState.range,
-                                        step: pickerState.step
-                                    )
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                                }
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity)
-                            .animation(.snappy(duration: 0.3), value: showStopwatchMode)
-                            
-                            if pickerState.isTimePicker {
-                                Button(action: {
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                        showStopwatchMode.toggle()
-                                    }
-                                }) {
-                                    ZStack {
-                                        Circle().fill(Color(.secondarySystemFill)).shadow(radius: 2)
-                                        Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
-                                            .font(.title2).foregroundStyle(.primary)
-                                    }
-                                    .frame(width: 50, height: 50)
-                                }
-                                .padding(.trailing, 20)
-                                .padding(.bottom, 20)
-                            }
-                        }
-                    }
-                    .zIndex(12)
-                }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -266,7 +159,25 @@ struct CircuitDetailView: View {
         } message: {
             Text("Godt jobbet! Økten ligger nå i historikken.")
         }
+        .navigationDestination(item: $segmentToNavigate) { segment in
+            SegmentEditorScreen(
+                routine: routine,
+                currentSegment: segment,
+                stopwatchManager: stopwatchManager,
+                isSessionStarted: isSessionStarted,
+                theme: currentTheme,
+                onMarkVisited: { markSegmentAsVisited($0) }
+            )
+            .navigationTransition(.zoom(sourceID: segment.persistentModelID, in: segmentAnimation))
+            .onDisappear { refreshUILoad() }
+        }
     }
+        
+    
+    
+    
+    
+    
     
     // --- FUNKSJONER ---
     
@@ -285,7 +196,7 @@ struct CircuitDetailView: View {
         if let firstSegment = uiSegments.first {
             markSegmentAsVisited(firstSegment)
             withAnimation(.snappy) {
-                activeDrawer = .editSegment(firstSegment)
+                segmentToNavigate = firstSegment
             }
         }
     }
@@ -362,18 +273,7 @@ struct CircuitDetailView: View {
         stopwatchManager.stop()
         
         withAnimation(.snappy) {
-            activeDrawer = .editSegment(newSegment)
-        }
-    }
-    
-    private func closeAllPanels() {
-        withAnimation(.snappy) {
-            activePicker = nil
-            activeDrawer = nil
-        }
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            refreshUILoad()
+            segmentToNavigate = newSegment
         }
     }
     
@@ -387,5 +287,146 @@ struct CircuitDetailView: View {
             segment.sortIndex = index
         }
         try? modelContext.save()
+    }
+}
+struct SegmentEditorScreen: View {
+    var routine: CircuitRoutine
+    @State var currentSegment: CircuitExercise
+    @ObservedObject var stopwatchManager: StopwatchManager
+    var isSessionStarted: Bool
+    var theme: AppTheme
+    var onMarkVisited: (CircuitExercise) -> Void
+    
+    @Environment(\.dismiss) var dismiss
+    @State private var activePicker: PickerState? = nil
+    @State private var showStopwatchMode = true
+    let pickerHeight: CGFloat = 280
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color(.systemBackground).ignoresSafeArea()
+            
+            // Hovedinnholdet
+            VStack(spacing: 0) {
+                // Toppmeny
+                HStack {
+                    Button(action: { dismiss() }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.left").bold()
+                            Text("Tilbake")
+                        }
+                        .foregroundStyle(Color.blue)
+                    }
+                    Spacer()
+                    Text("Rediger øvelse")
+                        .font(.headline)
+                    Spacer()
+                    // Ferdig-knapp for å enkelt lukke skuffen
+                    if activePicker != nil {
+                        Button("Ferdig") {
+                            withAnimation(.snappy) { activePicker = nil }
+                        }
+                        .foregroundStyle(.blue)
+                        .bold()
+                    } else {
+                        Color.clear.frame(width: 80, height: 44)
+                    }
+                }
+                .padding(.horizontal)
+                .frame(height: 50)
+                .background(Color(.systemBackground))
+                .zIndex(20)
+                
+                // Redigeringsskjemaet
+                AddSegmentView(
+                    routine: routine,
+                    segmentToEdit: currentSegment,
+                    currentActiveField: activePicker?.title,
+                    onDismiss: { dismiss() },
+                    onRequestPicker: { title, binding, range, step in
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
+                        showStopwatchMode = isTime
+                        withAnimation(.snappy) {
+                            activePicker = PickerState(title: title, binding: binding, range: range, step: step)
+                        }
+                    },
+                    onTyping: {
+                        withAnimation(.snappy) { activePicker = nil }
+                    },
+                    onSwitchSegment: { newSegment in
+                        stopwatchManager.stop()
+                        onMarkVisited(newSegment)
+                        currentSegment = newSegment
+                        if activePicker?.isTimePicker == true && !isSessionStarted {
+                            newSegment.durationSeconds = 0
+                        }
+                    }
+                )
+                // Usynlig padding så innholdet kan scrolle over skuffen
+                .padding(.bottom, activePicker != nil ? pickerHeight : 0)
+            }
+            
+            // Dimming bak skuffen
+            if activePicker != nil {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .padding(.top, 50) // Starter under toppmenyen
+                    .onTapGesture {
+                        withAnimation(.snappy) { activePicker = nil }
+                    }
+                    .zIndex(10)
+            }
+            
+            // SKUFFEN: Nøyaktig slik den lå originalt
+            if let pickerState = activePicker {
+                DrawerView(theme: theme, edge: .bottom, maxHeight: pickerHeight) {
+                    ZStack(alignment: .bottomTrailing) {
+                        VStack {
+                            Spacer()
+                            if pickerState.isTimePicker && showStopwatchMode {
+                                StopwatchView(
+                                    bindingTime: pickerState.binding,
+                                    allowResuming: isSessionStarted,
+                                    segment: currentSegment,
+                                    manager: stopwatchManager
+                                )
+                                .id(pickerState.id)
+                                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                            } else {
+                                VerticalRuler(
+                                    value: pickerState.binding,
+                                    range: pickerState.range,
+                                    step: pickerState.step
+                                )
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .animation(.snappy(duration: 0.3), value: showStopwatchMode)
+                        
+                        if pickerState.isTimePicker {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                    showStopwatchMode.toggle()
+                                }
+                            }) {
+                                ZStack {
+                                    Circle().fill(Color(.secondarySystemFill)).shadow(radius: 2)
+                                    Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
+                                        .font(.title2).foregroundStyle(.primary)
+                                }
+                                .frame(width: 50, height: 50)
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
+                        }
+                    }
+                }
+                .zIndex(12)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }

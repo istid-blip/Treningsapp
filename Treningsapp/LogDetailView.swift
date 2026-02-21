@@ -1,21 +1,15 @@
 import SwiftUI
 import SwiftData
 
-enum LogDrawerState: Identifiable {
-    case editEntry(LoggedExercise)
-    var id: String {
-        switch self {
-        case .editEntry(let entry): return "edit-log-\(entry.persistentModelID)"
-        }
-    }
-}
-
 struct LogDetailView: View {
     let log: WorkoutLog
     @Environment(\.dismiss) var dismiss
     
-    // UI States
-    @State private var activeDrawer: LogDrawerState? = nil
+    // --- NAVIGASJON OG ANIMASJON (Erstatter activeDrawer) ---
+    @Namespace private var logAnimation
+    @State private var entryToNavigate: LoggedExercise? = nil
+    // --------------------------------------------------------
+    
     @State private var activePicker: PickerState? = nil
     @State private var showStopwatchMode = true
     
@@ -124,7 +118,9 @@ struct LogDetailView: View {
                                     HStack(spacing: 12) {
                                         // Knapp 1: Statistikk
                                         Button(action: {
-                                            statsExercise = exercise
+                                            withAnimation(.snappy) {
+                                                statsExercise = exercise
+                                            }
                                         }) {
                                             HStack {
                                                 Image(systemName: "chart.xyaxis.line")
@@ -137,12 +133,15 @@ struct LogDetailView: View {
                                             .foregroundStyle(.blue)
                                             .cornerRadius(8)
                                         }
-                                        .buttonStyle(PlainButtonStyle()) // Hindrer at hele raden klikkes
+                                        .buttonStyle(PlainButtonStyle())
+                                        // NYTT: Knytter knappen til zoom-animasjonen
+                                        .matchedTransitionSource(id: "stats-\(exercise.persistentModelID.hashValue)", in: logAnimation)
                                         
                                         // Knapp 2: Juster / Rediger
                                         Button(action: {
+                                            // OPPDATERT: Sett navigasjon i stedet for skuff
                                             withAnimation(.snappy) {
-                                                activeDrawer = .editEntry(exercise)
+                                                entryToNavigate = exercise
                                             }
                                         }) {
                                             HStack {
@@ -157,6 +156,8 @@ struct LogDetailView: View {
                                             .cornerRadius(8)
                                         }
                                         .buttonStyle(PlainButtonStyle())
+                                        // OPPDATERT: Knytt zoom-animasjonen til knappen
+                                        .matchedTransitionSource(id: exercise.persistentModelID, in: logAnimation)
                                     }
                                 }
                                 .padding(.vertical, 6)
@@ -164,107 +165,33 @@ struct LogDetailView: View {
                             // --- ENDRING SLUTT ---
                         }
                     }
-                    .disabled(activeDrawer != nil || activePicker != nil)
-                }
-                
-                // --- DIMMING & SKUFFER (Uendret logikk, men gjenbruker koden din) ---
-                if activeDrawer != nil || activePicker != nil {
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .onTapGesture { closeAllPanels() }
-                        .transition(.opacity)
-                        .zIndex(10)
-                }
-                
-                if let drawerState = activeDrawer {
-                    let availableHeight = (activePicker != nil)
-                    ? (geometry.size.height - pickerHeight)
-                    : (geometry.size.height + 60)
-                    
-                    DrawerView(theme: currentTheme, edge: .top, maxHeight: availableHeight) {
-                        switch drawerState {
-                        case .editEntry(let entry):
-                            AddSegmentView(
-                                routine: nil,
-                                segmentToEdit: nil,
-                                log: log,
-                                logEntryToEdit: entry,
-                                onDismiss: { closeAllPanels() },
-                                onRequestPicker: { title, binding, range, step in
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                                    let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
-                                    showStopwatchMode = isTime
-                                    withAnimation(.snappy) {
-                                        activePicker = PickerState(title: title, binding: binding, range: range, step: step)
-                                    }
-                                },
-                                onTyping: { withAnimation(.snappy) { activePicker = nil } },
-                                onSwitchSegment: nil,
-                                onSwitchLogEntry: { newEntry in
-                                    withAnimation(.snappy) { activeDrawer = .editEntry(newEntry) }
-                                }
-                            )
-                        }
-                    }
-                    .zIndex(11)
-                    .ignoresSafeArea(.all, edges: .top)
-                }
-                
-                if let pickerState = activePicker {
-                    DrawerView(theme: currentTheme, edge: .bottom, maxHeight: pickerHeight) {
-                        ZStack(alignment: .bottomTrailing) {
-                            VStack {
-                                Spacer()
-                                if pickerState.isTimePicker && showStopwatchMode {
-                                    StopwatchView(bindingTime: pickerState.binding)
-                                        .transition(.scale(scale: 0.8).combined(with: .opacity))
-                                } else {
-                                    VerticalRuler(value: pickerState.binding, range: pickerState.range, step: pickerState.step)
-                                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                                }
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity)
-                            .animation(.snappy(duration: 0.3), value: showStopwatchMode)
-                            
-                            if pickerState.isTimePicker {
-                                Button(action: {
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                        showStopwatchMode.toggle()
-                                    }
-                                }) {
-                                    ZStack {
-                                        Circle().fill(Color(.secondarySystemFill)).shadow(radius: 2)
-                                        Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
-                                            .font(.title2).foregroundStyle(.primary)
-                                    }
-                                    .frame(width: 50, height: 50)
-                                }
-                                .padding(.trailing, 20)
-                                .padding(.bottom, 20)
-                            }
-                        }
-                    }
-                    .zIndex(12)
                 }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
         // --- ENDRING START: Presenterer statistikk-arket ---
-        .sheet(item: $statsExercise) { exercise in
+        // --- OPPDATERT: Presenterer statistikk med zoom-effekt ---
+        .navigationDestination(item: $statsExercise) { exercise in
             ExerciseStatsView(exerciseName: exercise.name, category: exercise.category)
+                .navigationTransition(.zoom(sourceID: "stats-\(exercise.persistentModelID.hashValue)", in: logAnimation))
         }
         // --- ENDRING SLUTT ---
+        
+        // --- NYTT: NAVIGASJONSDESTINASJON ---
+        .navigationDestination(item: $entryToNavigate) { entry in
+            LogEditorScreen(
+                log: log,
+                currentEntry: entry,
+                theme: currentTheme,
+                onSwitchEntry: { newEntry in
+                    entryToNavigate = newEntry
+                }
+            )
+            .navigationTransition(.zoom(sourceID: entry.persistentModelID, in: logAnimation))
+        }
     }
     
     // --- HJELPEFUNKSJONER (Uendret) ---
-    func closeAllPanels() {
-        withAnimation(.snappy) {
-            activePicker = nil
-            activeDrawer = nil
-        }
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
     
     @ViewBuilder
     func detailView(for exercise: LoggedExercise) -> some View {
@@ -301,5 +228,133 @@ struct LogDetailView: View {
             }
             Text(unit).foregroundStyle(.secondary)
         }
+    }
+}
+
+
+// --- NYTT: WRAPPER-VIEW FOR Å HÅNDTERE SKUFFEN I BUNNEN ---
+struct LogEditorScreen: View {
+    var log: WorkoutLog
+    @State var currentEntry: LoggedExercise
+    var theme: AppTheme
+    var onSwitchEntry: (LoggedExercise) -> Void
+    
+    @Environment(\.dismiss) var dismiss
+    @State private var activePicker: PickerState? = nil
+    @State private var showStopwatchMode = true
+    let pickerHeight: CGFloat = 280
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color(.systemBackground).ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Toppmeny
+                HStack {
+                    Button(action: { dismiss() }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.left").bold()
+                            Text("Tilbake")
+                        }
+                        .foregroundStyle(Color.blue)
+                    }
+                    Spacer()
+                    Text("Juster logg")
+                        .font(.headline)
+                    Spacer()
+                    if activePicker != nil {
+                        Button("Ferdig") {
+                            withAnimation(.snappy) { activePicker = nil }
+                        }
+                        .foregroundStyle(.blue)
+                        .bold()
+                    } else {
+                        Color.clear.frame(width: 80, height: 44)
+                    }
+                }
+                .padding(.horizontal)
+                .frame(height: 50)
+                .background(Color(.systemBackground))
+                .zIndex(20)
+                
+                // Redigeringsskjemaet
+                AddSegmentView(
+                    routine: nil,
+                    segmentToEdit: nil,
+                    log: log,
+                    logEntryToEdit: currentEntry,
+                    currentActiveField: activePicker?.title,
+                    onDismiss: { dismiss() },
+                    onRequestPicker: { title, binding, range, step in
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        let isTime = title.lowercased().contains("tid") || title.lowercased().contains("sek")
+                        showStopwatchMode = isTime
+                        withAnimation(.snappy) {
+                            activePicker = PickerState(title: title, binding: binding, range: range, step: step)
+                        }
+                    },
+                    onTyping: {
+                        withAnimation(.snappy) { activePicker = nil }
+                    },
+                    onSwitchSegment: nil,
+                    onSwitchLogEntry: { newEntry in
+                        currentEntry = newEntry
+                        onSwitchEntry(newEntry)
+                    }
+                )
+                .padding(.bottom, activePicker != nil ? pickerHeight : 0)
+            }
+            
+            // Dimming bak skuffen
+            if activePicker != nil {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .padding(.top, 50)
+                    .onTapGesture {
+                        withAnimation(.snappy) { activePicker = nil }
+                    }
+                    .zIndex(10)
+            }
+            
+            // Bunnskuff
+            if let pickerState = activePicker {
+                DrawerView(theme: theme, edge: .bottom, maxHeight: pickerHeight) {
+                    ZStack(alignment: .bottomTrailing) {
+                        VStack {
+                            Spacer()
+                            if pickerState.isTimePicker && showStopwatchMode {
+                                StopwatchView(bindingTime: pickerState.binding)
+                                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                            } else {
+                                VerticalRuler(value: pickerState.binding, range: pickerState.range, step: pickerState.step)
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .animation(.snappy(duration: 0.3), value: showStopwatchMode)
+                        
+                        if pickerState.isTimePicker {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                    showStopwatchMode.toggle()
+                                }
+                            }) {
+                                ZStack {
+                                    Circle().fill(Color(.secondarySystemFill)).shadow(radius: 2)
+                                    Image(systemName: showStopwatchMode ? "ruler" : "stopwatch")
+                                        .font(.title2).foregroundStyle(.primary)
+                                }
+                                .frame(width: 50, height: 50)
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
+                        }
+                    }
+                }
+                .zIndex(12)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
