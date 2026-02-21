@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @Namespace private var cardAnimation
+    
     @Environment(\.modelContext) private var modelContext
     
     @Query(sort: \CircuitRoutine.sortIndex, order: .forward) private var routines: [CircuitRoutine]
@@ -63,7 +65,10 @@ struct ContentView: View {
                             // B: SISTE ØKTER
                             ForEach(recentRoutines) { routine in
                                 Button(action: { routineToNavigate = routine }) {
-                                    TreningsKort(routine: routine).aspectRatio(1, contentMode: .fit)
+                                    TreningsKort(routine: routine)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        // Knytter selve kortet til animasjonen ved hjelp av rutine-IDen:
+                                        .matchedTransitionSource(id: routine.id, in: cardAnimation)
                                 }
                             }
                             
@@ -172,6 +177,9 @@ struct ContentView: View {
             // Navigering skjer her
             .navigationDestination(item: $routineToNavigate) { routine in
                 CircuitDetailView(routine: routine)
+                    // Utfører "blås opp"-animasjonen fra kortet som ble trykket på:
+                    .navigationTransition(.zoom(sourceID: routine.id, in: cardAnimation))
+            
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSettings) {
