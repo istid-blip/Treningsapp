@@ -99,6 +99,10 @@ struct AddSegmentView: View {
                 .padding(.horizontal)
                 .padding(.top, 20)
                 .padding(.bottom, 50)
+                .background(Color.clear.contentShape(Rectangle()).onTapGesture {
+                                    onTyping() // Lukker skuffen
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) // Lukker tastatur
+                                })
             }
         }
         .onAppear {

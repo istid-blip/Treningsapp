@@ -34,6 +34,8 @@ class StopwatchManager: ObservableObject {
         
         activeSegmentID = segment.persistentModelID
         
+        UIApplication.shared.isIdleTimerDisabled = true
+        
         // Start ny timer som oppdaterer modellen direkte
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             Task { @MainActor in
@@ -47,6 +49,8 @@ class StopwatchManager: ObservableObject {
         timer?.invalidate()
         timer = nil
         activeSegmentID = nil
+        
+        UIApplication.shared.isIdleTimerDisabled = false
     }
     
     /// Sjekker om tiden går for et spesifikt segment.
@@ -112,6 +116,10 @@ struct StopwatchView: View {
         .onAppear {
             syncState()
         }
+        // LEGG TIL DENNE: Oppdaterer klokken automatisk når du bytter øvelse med pilene
+        .onChange(of: segment) { _, _ in
+            syncState()
+        }
         .onChange(of: bindingTime) { _, newValue in
             // Hvis manageren oppdaterer tiden i bakgrunnen, synkroniser visningen
             if isRunning && abs(Double(newValue) - elapsedTime) > 1.0 {
@@ -141,26 +149,30 @@ struct StopwatchView: View {
     }
     
     private func syncState() {
-        if let mgr = manager, let seg = segment {
-            // Sjekk om global timer allerede går for denne
-            if mgr.isRunning(seg) {
-                isRunning = true
-                elapsedTime = Double(seg.durationSeconds)
-            } else if allowResuming {
-                elapsedTime = Double(bindingTime)
+            if let mgr = manager, let seg = segment {
+                // Sjekk om global timer allerede går for denne
+                if mgr.isRunning(seg) {
+                    isRunning = true
+                    elapsedTime = Double(seg.durationSeconds)
+                } else if allowResuming {
+                    isRunning = false // <-- NY: Tving knappen til å stoppe
+                    elapsedTime = Double(bindingTime)
+                } else {
+                    isRunning = false // <-- NY: Tving knappen til å stoppe
+                    elapsedTime = 0.0
+                }
             } else {
-                elapsedTime = 0.0
-            }
-        } else {
-            // Fallback (uten manager)
-            if allowResuming {
-                elapsedTime = Double(bindingTime)
-            } else {
-                elapsedTime = 0.0
-                if bindingTime != 0 { bindingTime = 0 }
+                // Fallback (uten manager)
+                if allowResuming {
+                    isRunning = false // <-- NY: Tving knappen til å stoppe
+                    elapsedTime = Double(bindingTime)
+                } else {
+                    isRunning = false // <-- NY: Tving knappen til å stoppe
+                    elapsedTime = 0.0
+                    if bindingTime != 0 { bindingTime = 0 }
+                }
             }
         }
-    }
     
     func toggleStopwatch() {
         let generator = UIImpactFeedbackGenerator(style: .medium)

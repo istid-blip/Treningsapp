@@ -372,9 +372,7 @@ struct SegmentEditorScreen: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .padding(.top, 50) // Starter under toppmenyen
-                    .onTapGesture {
-                        withAnimation(.snappy) { activePicker = nil }
-                    }
+                    .allowsHitTesting(false)
                     .zIndex(10)
             }
             

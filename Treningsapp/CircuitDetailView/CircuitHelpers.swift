@@ -13,7 +13,7 @@ enum DrawerState: Identifiable {
 }
 
 struct PickerState: Identifiable {
-    let id = UUID()
+    let id = "FastSkuffID"
     let title: String
     let binding: Binding<Int>
     let range: ClosedRange<Int>
