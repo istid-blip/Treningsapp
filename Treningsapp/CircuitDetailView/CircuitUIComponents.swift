@@ -182,3 +182,38 @@ struct VerticalRuler: View {
         }
     }
 }
+struct CompactInputCell: View {
+    let value: String
+    let label: String
+    var isActive: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isActive ? Color.accentColor.opacity(0.1) : Color(.secondarySystemGroupedBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isActive ? Color.accentColor : Color.clear, lineWidth: 2)
+                        )
+                    
+                    Text(value)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(isActive ? Color.accentColor : Color.primary)
+                        .padding(.vertical, 16)
+                }
+                
+                Text(label)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+            }
+        }
+        .buttonStyle(ScaleButtonStyle())
+        .frame(maxWidth: .infinity)
+    }
+}

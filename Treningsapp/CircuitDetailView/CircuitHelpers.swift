@@ -100,3 +100,25 @@ func iconForSegment(_ segment: CircuitExercise) -> String? {
     case .other: return "timer"
     }
 }
+
+// Felles liste over standardøvelser tilgjengelig for hele appen
+let standardExercises: [(name: String, category: ExerciseCategory)] = [
+    ("Knebøy", .strength), ("Benkpress", .strength), ("Markløft", .strength),
+    ("Pushups", .strength), ("Pullups", .strength), ("Utfall", .strength),
+    ("Skulderpress", .strength), ("Militærpress", .strength),
+    ("Løping", .cardio), ("Intervaller", .cardio), ("Sykling", .cardio),
+    ("Roing", .cardio),
+    ("Planken", .combined), ("Situps", .combined), ("Rygghev", .combined),
+    ("Yoga", .combined), ("Uttøying", .combined), ("Balansebrett", .combined),
+    ("Pause", .other)
+]
+
+// Generell funksjon for å hente ikon basert på kategori
+func iconForCategory(_ category: ExerciseCategory) -> String {
+    switch category {
+    case .strength: return "dumbbell.fill"
+    case .cardio: return "figure.run"
+    case .combined: return "figure.mind.and.body"
+    case .other: return "star.fill"
+    }
+}

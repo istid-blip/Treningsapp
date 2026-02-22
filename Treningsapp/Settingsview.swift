@@ -6,15 +6,31 @@
 //
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    @Binding var maxCount: Int // Denne binder vi til ContentView slik at hjem-skjermen oppdateres
+    @Binding var maxCount: Int
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext // Trengs for å kunne importere data
+    
+    // Henter inn treningsloggene slik at vi kan eksportere dem
+    @Query(sort: \WorkoutLog.date, order: .reverse) var workoutLogs: [WorkoutLog]
+    
+    // Henter inn treningsprogrammene slik at vi får med dem i den komplette backupen
+    @Query(sort: \CircuitRoutine.sortIndex) var routines: [CircuitRoutine]
+    
+    // Variabler for å holde på de genererte filene
+    @State private var jsonExportURL: URL?
+    @State private var csvExportURL: URL?
+    
+    // Hjelpevariabler for import
+    @State private var isImporting = false
+    @State private var importSuccessMessage: String?
     
     var body: some View {
         NavigationStack {
             List {
-                // Seksjon 1: Hjem-skjerm innstillinger (Det du hadde fra før)
+                // Seksjon 1: Hjem-skjerm innstillinger
                 Section(header: Text("Hjem-skjerm")) {
                     Stepper(value: $maxCount, in: 4...7) {
                         HStack {
@@ -30,14 +46,45 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 
-                // Seksjon 2: Innhold (Ny funksjonalitet)
+                // Seksjon 2: Innhold
                 Section(header: Text("Innhold")) {
                     NavigationLink(destination: ExerciseLibraryView()) {
                         Label("Mine Øvelser", systemImage: "dumbbell.fill")
                     }
                 }
                 
-                // Seksjon 3: Info
+                // NY SEKSJON: Eksport og import av data
+                Section(header: Text("Sikkerhetskopi og eksport"), footer: Text(importSuccessMessage ?? "Import vil legge til dataene uten å slette det du allerede har.")) {
+                    
+                    // KOMPLETT BACKUP (JSON)
+                    if let jsonURL = jsonExportURL {
+                        ShareLink(item: jsonURL, subject: Text("Backup av Treningsdata"), message: Text("Her er en komplett backup i JSON-format.")) {
+                            Label("Del JSON Backup", systemImage: "doc.text.fill")
+                        }
+                    } else {
+                        Button(action: { jsonExportURL = DataExportManager.generateJSON(routines: routines, logs: workoutLogs) }) {
+                            Label("Klargjør Komplett Backup", systemImage: "arrow.up.doc")
+                        }
+                    }
+                    
+                    // IMPORT FRA JSON
+                    Button(action: { isImporting = true }) {
+                        Label("Importer data fra fil", systemImage: "arrow.down.doc")
+                    }
+                    
+                    // KUN HISTORIKK FOR REGNEARK (CSV)
+                    if let csvURL = csvExportURL {
+                        ShareLink(item: csvURL, subject: Text("Treningsdata for regneark"), message: Text("Her er treningsdataene i CSV-format.")) {
+                            Label("Del CSV (For Excel/Numbers)", systemImage: "tablecells.fill")
+                        }
+                    } else {
+                        Button(action: { csvExportURL = DataExportManager.generateCSV(logs: workoutLogs) }) {
+                            Label("Klargjør CSV Eksport", systemImage: "arrow.up.doc")
+                        }
+                    }
+                }
+                
+                // Seksjon 4: Info
                 Section(header: Text("Om appen")) {
                     HStack {
                         Label("Versjon", systemImage: "info.circle")
@@ -52,6 +99,31 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Ferdig") { dismiss() }
                 }
+            }
+            // Filvelger for import
+            .fileImporter(
+                isPresented: $isImporting,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        do {
+                            try DataExportManager.importJSON(from: url, context: modelContext)
+                            importSuccessMessage = "Data ble importert!"
+                        } catch {
+                            importSuccessMessage = "Feil ved import: \(error.localizedDescription)"
+                        }
+                    }
+                case .failure(let error):
+                    print("Brukeren avbrøt eller en feil skjedde: \(error)")
+                }
+            }
+            // Rydder opp midlertidige filer når visningen lukkes
+            .onDisappear {
+                if let url = jsonExportURL { try? FileManager.default.removeItem(at: url) }
+                if let url = csvExportURL { try? FileManager.default.removeItem(at: url) }
             }
         }
     }
