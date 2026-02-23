@@ -37,7 +37,7 @@ struct AddSegmentView: View {
     @State private var selectedCategory: ExerciseCategory = .strength
     @State private var note = ""
     
-    @State private var duration = 0
+    @State private var duration: Double = 0.0
     @State private var targetReps = 10
     @State private var weight: Double = 0.0
     @State private var distance: Double = 0.0
@@ -317,12 +317,18 @@ struct AddSegmentView: View {
             
             if showTime {
                 CompactInputCell(
-                    value: duration >= 60 ? String(format: "%d:%02d", duration / 60, duration % 60) : "\(duration)",
+                    // Viser desimaler visuelt, f.eks "45.23"
+                    value: duration >= 60 ? String(format: "%d:%02.0f", Int(duration) / 60, duration.truncatingRemainder(dividingBy: 60)) : String(format: "%.2f", duration),
                     label: "Tid",
                     isActive: activeField == .time,
                     action: {
                         activeField = .time
-                        onRequestPicker("Tid", $duration, 0...3600, 5)
+                        // Oversetter Double til Int for at linjal-visningen skal fungere uendret
+                        let timeBinding = Binding<Int>(
+                            get: { Int(duration) },
+                            set: { duration = Double($0) }
+                        )
+                        onRequestPicker("Tid", timeBinding, 0...3600, 5)
                     }
                 )
             }
@@ -472,7 +478,11 @@ struct AddSegmentView: View {
     func restoreActivePickerBinding(for field: ActiveField) {
         switch field {
         case .time:
-            onRequestPicker("Tid", $duration, 0...3600, 5)
+                    let timeBinding = Binding<Int>(
+                        get: { Int(duration) },
+                        set: { duration = Double($0) }
+                    )
+                    onRequestPicker("Tid", timeBinding, 0...3600, 5)
         case .reps:
             onRequestPicker("Antall reps", $targetReps, 1...100, 1)
         case .weight:

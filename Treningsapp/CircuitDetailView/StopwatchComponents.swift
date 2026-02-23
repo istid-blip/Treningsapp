@@ -2,23 +2,20 @@
 //  StopwatchComponents.swift
 //  Treningsapp
 //
-//  Created by Frode Halrynjo on 15/02/2026.
-//
+
 import SwiftUI
 import SwiftData
 import Combine
-import UIKit // For UIImpactFeedbackGenerator
+import UIKit
 
 // MARK: - Stopwatch Manager
-/// Denne klassen fungerer som "hjernen" for tidtakingen.
-/// Den holder styr på hvilket segment (øvelse) som er aktivt, og oppdaterer
-/// datamodellen (CircuitExercise) direkte hvert sekund.
-/// Dette gjør at tiden fortsetter å gå selv om brukeren minimerer stoppeklokke-visningen.
 class StopwatchManager: ObservableObject {
     @Published var activeSegmentID: PersistentIdentifier? = nil
-    private var timer: Timer?
     
-    /// Starter eller stopper tiden for et gitt segment basert på nåværende status.
+    private var startTimestamp: Double = 0.0
+    private var accumulatedTime: Double = 0.0
+    private var activeSegment: CircuitExercise? = nil
+    
     func toggle(_ segment: CircuitExercise) {
         if activeSegmentID == segment.persistentModelID {
             stop()
@@ -27,68 +24,67 @@ class StopwatchManager: ObservableObject {
         }
     }
     
-    /// Starter en timer som oppdaterer segmentets `durationSeconds` hvert sekund.
     func start(_ segment: CircuitExercise) {
-        // Sikre at vi kun har én aktiv timer om gangen
         stop()
         
+        activeSegment = segment
         activeSegmentID = segment.persistentModelID
         
-        UIApplication.shared.isIdleTimerDisabled = true
+        accumulatedTime = segment.durationSeconds
+        startTimestamp = Date().timeIntervalSince1970
         
-        // Start ny timer som oppdaterer modellen direkte
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            Task { @MainActor in
-                segment.durationSeconds += 1
-            }
-        }
+        UIApplication.shared.isIdleTimerDisabled = true
     }
     
-    /// Stopper aktiv timer og nullstiller referansen.
     func stop() {
-        timer?.invalidate()
-        timer = nil
-        activeSegmentID = nil
+        if let segment = activeSegment {
+            // Skriver nøyaktig totaltid med desimaler til databasen
+            let total = accumulatedTime + (Date().timeIntervalSince1970 - startTimestamp)
+            segment.durationSeconds = total
+        }
         
+        activeSegmentID = nil
+        activeSegment = nil
         UIApplication.shared.isIdleTimerDisabled = false
     }
     
-    /// Sjekker om tiden går for et spesifikt segment.
     func isRunning(_ segment: CircuitExercise) -> Bool {
         return activeSegmentID == segment.persistentModelID
+    }
+    
+    func getCurrentTime(for segment: CircuitExercise) -> Double {
+        if isRunning(segment) {
+            return accumulatedTime + (Date().timeIntervalSince1970 - startTimestamp)
+        }
+        return segment.durationSeconds
     }
 }
 
 // MARK: - Stopwatch View
-/// Visuell representasjon av stoppeklokken.
-/// Den kan brukes i to moduser:
-/// 1. Koblet til `StopwatchManager` (Global timer): Oppdaterer seg mot en aktiv økt.
-/// 2. Frittstående (Lokal timer): Brukes f.eks. i historikk-visning hvor man bare redigerer et tall.
 struct StopwatchView: View {
     @Binding var bindingTime: Int
     var allowResuming: Bool = true
     
-    // Kobling mot global manager (valgfritt)
     var segment: CircuitExercise? = nil
     var manager: StopwatchManager? = nil
     
     @State private var elapsedTime: Double = 0.0
     @State private var isRunning = false
     
-    // Lokal timer oppdaterer UI oftere (0.1s) for smooth animasjon,
-    // mens manageren oppdaterer databasen sjeldnere (1.0s).
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    @State private var localStartTimestamp: Double = 0.0
+    @State private var localAccumulatedTime: Double = 0.0
+    
+    // Oppdaterer visningen raskt for smooth hundredels-animasjon
+    let timer = Timer.publish(every: 0.03, on: .main, in: .common).autoconnect()
     
     var body: some View {
         VStack {
             Button(action: toggleStopwatch) {
                 ZStack {
-                    // Sirkel-bakgrunn som endrer farge
                     Circle()
                         .fill(isRunning ? Color.orange : Color.green)
                         .shadow(color: (isRunning ? Color.orange : Color.green).opacity(0.4), radius: 15, x: 0, y: 5)
                     
-                    // "Puls"-effekt når den kjører
                     if isRunning {
                         Circle()
                             .stroke(Color.white.opacity(0.3), lineWidth: 2)
@@ -96,13 +92,12 @@ struct StopwatchView: View {
                             .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: isRunning)
                     }
                     
-                    // Selve tiden og ikonet
                     VStack(spacing: 5) {
                         Text(formatDetailedTime(elapsedTime))
                             .font(.system(size: 48, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
                             .monospacedDigit()
-                            .contentTransition(.numericText(value: elapsedTime))
+                            // Fjerner contentTransition for desimaler, da standard numericText glitchet litt
                         
                         Image(systemName: isRunning ? "pause.fill" : "play.fill")
                             .font(.title2)
@@ -111,83 +106,77 @@ struct StopwatchView: View {
                 }
                 .frame(width: 190, height: 190)
             }
-            .buttonStyle(ScaleButtonStyle()) // NB: Denne ligger nå i CircuitHelpers.swift
+            .buttonStyle(ScaleButtonStyle())
         }
         .onAppear {
             syncState()
         }
-        // LEGG TIL DENNE: Oppdaterer klokken automatisk når du bytter øvelse med pilene
         .onChange(of: segment) { _, _ in
             syncState()
         }
         .onChange(of: bindingTime) { _, newValue in
-            // Hvis manageren oppdaterer tiden i bakgrunnen, synkroniser visningen
-            if isRunning && abs(Double(newValue) - elapsedTime) > 1.0 {
-                 elapsedTime = Double(newValue)
-            }
-            // Sikkerhetsmekanisme
-            if newValue == 0 && !isRunning {
-                elapsedTime = 0.0
+            if !isRunning {
+                elapsedTime = Double(newValue)
             }
         }
         .onReceive(timer) { _ in
             guard isRunning else { return }
-            elapsedTime += 0.1
             
-            if manager == nil {
-                // Ingen manager: Vi eier sannheten, oppdater binding direkte.
-                bindingTime = Int(elapsedTime)
+            if let mgr = manager, let seg = segment {
+                elapsedTime = mgr.getCurrentTime(for: seg)
             } else {
-                // Med manager: Synkroniser bindingen visuelt hvert sekund.
-                // Manageren tar seg av databasen i bakgrunnen.
-                if Int(elapsedTime * 10) % 10 == 0 {
-                    bindingTime = Int(elapsedTime)
-                }
+                elapsedTime = localAccumulatedTime + (Date().timeIntervalSince1970 - localStartTimestamp)
             }
         }
-        // Merk: Vi stopper ikke manageren i onDisappear, for vi vil at den skal kjøre i bakgrunnen.
     }
     
     private func syncState() {
-            if let mgr = manager, let seg = segment {
-                // Sjekk om global timer allerede går for denne
-                if mgr.isRunning(seg) {
-                    isRunning = true
-                    elapsedTime = Double(seg.durationSeconds)
-                } else if allowResuming {
-                    isRunning = false // <-- NY: Tving knappen til å stoppe
-                    elapsedTime = Double(bindingTime)
-                } else {
-                    isRunning = false // <-- NY: Tving knappen til å stoppe
-                    elapsedTime = 0.0
-                }
+        if let mgr = manager, let seg = segment {
+            if mgr.isRunning(seg) {
+                isRunning = true
+                elapsedTime = mgr.getCurrentTime(for: seg)
             } else {
-                // Fallback (uten manager)
-                if allowResuming {
-                    isRunning = false // <-- NY: Tving knappen til å stoppe
-                    elapsedTime = Double(bindingTime)
-                } else {
-                    isRunning = false // <-- NY: Tving knappen til å stoppe
-                    elapsedTime = 0.0
-                    if bindingTime != 0 { bindingTime = 0 }
-                }
+                isRunning = false
+                elapsedTime = seg.durationSeconds
             }
+        } else {
+            isRunning = false
+            elapsedTime = Double(bindingTime)
+            localAccumulatedTime = Double(bindingTime)
         }
+    }
     
     func toggleStopwatch() {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
-        isRunning.toggle()
-        
         if let mgr = manager, let seg = segment {
             mgr.toggle(seg)
+            isRunning = mgr.isRunning(seg)
+            if !isRunning {
+                // Returnerer nærmeste heltall til rulle-linjalen, men den ekte
+                // desimaltiden er trygt lagret i segment.durationSeconds via manageren.
+                bindingTime = Int(seg.durationSeconds)
+                elapsedTime = seg.durationSeconds
+            }
+        } else {
+            isRunning.toggle()
+            if isRunning {
+                localStartTimestamp = Date().timeIntervalSince1970
+                localAccumulatedTime = Double(bindingTime)
+            } else {
+                let total = localAccumulatedTime + (Date().timeIntervalSince1970 - localStartTimestamp)
+                bindingTime = Int(total)
+                elapsedTime = total
+            }
         }
     }
     
     func formatDetailedTime(_ totalSeconds: Double) -> String {
         let minutes = Int(totalSeconds) / 60
         let seconds = Int(totalSeconds) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        let hundredths = Int((totalSeconds.truncatingRemainder(dividingBy: 1)) * 100)
+        
+        return String(format: "%02d:%02d.%02d", minutes, seconds, hundredths)
     }
 }

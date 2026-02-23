@@ -64,7 +64,7 @@ struct LogDetailView: View {
                                     HStack(spacing: 6) {
                                         Image(systemName: "clock").foregroundStyle(.gray)
                                         Text("Total tid:").foregroundStyle(.secondary)
-                                        Text(formatTid(log.totalDuration)).bold().foregroundStyle(.blue)
+                                        Text(formatTid(Double(log.totalDuration))).bold().foregroundStyle(.blue)
                                     }
                                     .font(.subheadline)
                                     .padding(.top, 2)

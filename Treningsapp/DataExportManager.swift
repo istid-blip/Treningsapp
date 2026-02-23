@@ -23,7 +23,7 @@ struct ExportRoutine: Codable {
 
 struct ExportSegment: Codable {
     let name: String
-    let durationSeconds: Int
+    let durationSeconds: Double
     let targetReps: Int
     let weight: Double
     let distance: Double
@@ -43,7 +43,7 @@ struct ExportLog: Codable {
 struct ExportExercise: Codable {
     let name: String
     let category: String
-    let duration: Int
+    let duration: Double
     let reps: Int
     let weight: Double
     let distance: Double

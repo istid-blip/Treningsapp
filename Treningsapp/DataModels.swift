@@ -37,7 +37,7 @@ final class CircuitExercise {
     var name: String
     
     // Verdier
-    var durationSeconds: Int
+    var durationSeconds: Double
     var targetReps: Int
     var weight: Double
     var distance: Double
@@ -53,7 +53,7 @@ final class CircuitExercise {
     }
     
     init(name: String,
-         durationSeconds: Int = 45,
+         durationSeconds: Double = 45.0,
          targetReps: Int = 10,
          weight: Double = 0.0,
          distance: Double = 0.0,
@@ -101,7 +101,7 @@ final class LoggedExercise {
     var categoryRawValue: String
     
     // Gjeldende verdier
-    var durationSeconds: Int
+    var durationSeconds: Double
     var targetReps: Int
     var weight: Double
     var distance: Double
@@ -111,7 +111,7 @@ final class LoggedExercise {
     var sortIndex: Int = 0
     
     // Originale verdier (hvis endret i ettertid)
-    var originalDuration: Int?
+    var originalDuration: Double?
     var originalReps: Int?
     var originalWeight: Double?
     var originalDistance: Double?
@@ -125,7 +125,7 @@ final class LoggedExercise {
         ExerciseCategory(rawValue: categoryRawValue) ?? .strength
     }
     
-    init(name: String, categoryRawValue: String, duration: Int, reps: Int, weight: Double, distance: Double, note: String, sortIndex: Int = 0) {
+    init(name: String, categoryRawValue: String, duration: Double, reps: Int, weight: Double, distance: Double, note: String, sortIndex: Int = 0) {
         self.name = name
         self.categoryRawValue = categoryRawValue
         self.durationSeconds = duration
@@ -137,12 +137,12 @@ final class LoggedExercise {
     }
 }
 
-func formatTid(_ sekunder: Int) -> String {
+func formatTid(_ sekunder: Double) -> String {
     if sekunder >= 60 {
-        let min = sekunder / 60
-        let sek = sekunder % 60
-        return String(format: "%d:%02d min", min, sek)
+        let min = Int(sekunder) / 60
+        let sek = sekunder.truncatingRemainder(dividingBy: 60)
+        return String(format: "%d:%05.2f min", min, sek)
     } else {
-        return "\(sekunder) sek"
+        return String(format: "%.2f sek", sekunder)
     }
 }
