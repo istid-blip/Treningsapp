@@ -101,16 +101,45 @@ func iconForSegment(_ segment: CircuitExercise) -> String? {
     }
 }
 
-// Felles liste over standardøvelser tilgjengelig for hele appen
-let standardExercises: [(name: String, category: ExerciseCategory)] = [
-    ("Knebøy", .strength), ("Benkpress", .strength), ("Markløft", .strength),
-    ("Pushups", .strength), ("Pullups", .strength), ("Utfall", .strength),
-    ("Skulderpress", .strength), ("Militærpress", .strength),
-    ("Løping", .cardio), ("Intervaller", .cardio), ("Sykling", .cardio),
-    ("Roing", .cardio),
-    ("Planken", .combined), ("Situps", .combined), ("Rygghev", .combined),
-    ("Yoga", .combined), ("Uttøying", .combined), ("Balansebrett", .combined),
-    ("Pause", .other)
+// Ny struktur for å definere maler for øvelser (Pass på at du har denne!)
+struct ExerciseTemplate {
+    let name: String
+    let category: ExerciseCategory
+    
+    // Hvilke felt skal vises?
+    var showReps: Bool = false
+    var showWeight: Bool = false
+    var showTime: Bool = false
+    var showDistance: Bool = false
+    var showHeartRate: Bool = false
+}
+
+// Utvidet liste over standardøvelser tilgjengelig for hele appen
+let standardExercises: [ExerciseTemplate] = [
+    // --- STYRKE ---
+    ExerciseTemplate(name: "Knebøy", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Benkpress", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Markløft", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Pushups", category: .strength, showReps: true, showWeight: false),
+    ExerciseTemplate(name: "Pullups", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Utfall", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Skulderpress", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Bicepscurl", category: .strength, showReps: true, showWeight: true),
+    ExerciseTemplate(name: "Nedtrekk", category: .strength, showReps: true, showWeight: true),
+    
+    // --- KARDIO ---
+    ExerciseTemplate(name: "Løping", category: .cardio, showTime: true, showDistance: true, showHeartRate: true),
+    ExerciseTemplate(name: "Sykling", category: .cardio, showTime: true, showDistance: true, showHeartRate: true),
+    ExerciseTemplate(name: "Roing", category: .cardio, showTime: true, showDistance: true, showHeartRate: true),
+    ExerciseTemplate(name: "Gåtur", category: .cardio, showTime: true, showDistance: true, showHeartRate: true),
+    ExerciseTemplate(name: "Trappemaskin", category: .cardio, showTime: true, showHeartRate: true),
+    
+    // --- KOMBINERT / ANNET ---
+    ExerciseTemplate(name: "Planken", category: .combined, showTime: true),
+    ExerciseTemplate(name: "Situps", category: .combined, showReps: true),
+    ExerciseTemplate(name: "Burpees", category: .combined, showReps: true, showTime: true),
+    ExerciseTemplate(name: "Yoga", category: .combined, showTime: true, showHeartRate: true),
+    ExerciseTemplate(name: "Stretching", category: .combined, showTime: true)
 ]
 
 // Generell funksjon for å hente ikon basert på kategori

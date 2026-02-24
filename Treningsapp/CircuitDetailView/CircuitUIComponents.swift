@@ -7,6 +7,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import Combine
 
 // MARK: - Draggable Segment View
 /// Visningen av hver enkelt øvelse i rutenettet (grid).
@@ -216,4 +217,46 @@ struct CompactInputCell: View {
         .buttonStyle(ScaleButtonStyle())
         .frame(maxWidth: .infinity)
     }
+}
+// MARK: - Live Time Input Cell
+/// Viser en oppdatert tidsverdi (MM:SS) mens klokken går, med en egen skånsom oppdateringspuls.
+struct LiveTimeInputCell: View {
+    @Binding var duration: Double
+    var segment: CircuitExercise?
+    var isActive: Bool
+    let action: () -> Void
+    
+    @State private var displayValue: String = "0"
+    
+    // En rolig puls som vekker akkurat denne lille ruten to ganger i sekundet
+    let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        CompactInputCell(
+            value: displayValue,
+            label: "Tid",
+            isActive: isActive,
+            action: action
+        )
+        .onAppear { updateDisplay() }
+        .onChange(of: duration) { _, _ in updateDisplay() }
+        .onReceive(timer) { _ in
+            // Oppdater kun teksten hvis feltet er aktivt/synlig
+            if isActive {
+                updateDisplay()
+            }
+        }
+    }
+    
+    private func updateDisplay() {
+            if let seg = segment, StopwatchManager.shared.isRunning(seg) {
+                // Klokken går! Hent nøyaktig tid direkte fra hjernen:
+                let liveTime = StopwatchManager.shared.getCurrentTime(for: seg)
+                displayValue = splitTime(liveTime).main
+            } else {
+                // Klokken står stille, bruk den lagrede verdien:
+                let savedTime = segment?.durationSeconds ?? duration
+                displayValue = splitTime(savedTime).main
+            }
+        }
 }

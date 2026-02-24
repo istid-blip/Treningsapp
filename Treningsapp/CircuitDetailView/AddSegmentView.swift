@@ -11,6 +11,9 @@ import SwiftData
 struct AddSegmentView: View {
     @Environment(\.modelContext) var modelContext
     
+        
+        @State private var showingFieldMenu = false
+    
     // --- Modus 1: Redigere rutine ---
     var routine: CircuitRoutine?
     var segmentToEdit: CircuitExercise?
@@ -38,9 +41,17 @@ struct AddSegmentView: View {
     @State private var note = ""
     
     @State private var duration: Double = 0.0
-    @State private var targetReps = 10
-    @State private var weight: Double = 0.0
-    @State private var distance: Double = 0.0
+        @State private var targetReps = 10
+        @State private var weight: Double = 0.0
+        @State private var distance: Double = 0.0
+        @State private var heartRate: Int = 0 // Ny puls-variabel
+        
+        // Styrer hvilke felt som er synlige for denne spesifikke øvelsen
+        @State private var showReps: Bool = false
+        @State private var showWeight: Bool = false
+        @State private var showTime: Bool = false
+        @State private var showDistance: Bool = false
+        @State private var showHeartRate: Bool = false
     
     @State private var showDeleteConfirmation = false
     
@@ -118,6 +129,13 @@ struct AddSegmentView: View {
         .onChange(of: weight) { _, _ in updateSegment() }
         .onChange(of: distance) { _, _ in updateSegment() }
         
+        // NY KODE: Lytter på bryterne i menyen din!
+                .onChange(of: showReps) { _, _ in updateSegment() }
+                .onChange(of: showWeight) { _, _ in updateSegment() }
+                .onChange(of: showTime) { _, _ in updateSegment() }
+                .onChange(of: showDistance) { _, _ in updateSegment() }
+                .onChange(of: showHeartRate) { _, _ in updateSegment() }
+        
         .onChange(of: segmentToEdit?.durationSeconds) { _, newValue in
             if let val = newValue, val != duration {
                 duration = val
@@ -135,6 +153,22 @@ struct AddSegmentView: View {
         } message: {
             Text("Er du sikker på at du vil fjerne denne delen?")
         }
+        .sheet(isPresented: $showingFieldMenu) {
+                    // Plassholder for din fremtidige custom overlegg-meny
+                    NavigationStack {
+                        Form {
+                            Section(header: Text("Velg hvilke felt som skal være synlige. Dette gjelder for alle øvelser.")) {
+                                Toggle("Tid", isOn: $showTime)
+                                Toggle("Distanse", isOn: $showDistance)
+                                Toggle("Repetisjoner", isOn: $showReps)
+                                Toggle("Vekt", isOn: $showWeight)
+                            }
+                        }
+                        .navigationTitle("Tilpass felt")
+                        .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .presentationDetents([.medium])
+                }
     }
     
     // --- VIEW COMPONENTS ---
@@ -221,55 +255,59 @@ struct AddSegmentView: View {
                         
                         ScrollView {
                             LazyVStack(spacing: 0) {
-                                ForEach(exerciseSuggestions, id: \.0) { suggestion in
-                                    Button(action: {
-                                        withAnimation(.snappy) {
-                                            name = suggestion.0
-                                            selectedCategory = suggestion.1
-                                            applySmartDefaults()
-                                            updateSegment()
-                                            isNameFocused = false
-                                            activeField = nil
-                                        }
-                                    }) {
-                                        HStack(spacing: 12) {
-                                            // Kategori-ikon
-                                            ZStack {
-                                                
-                                                Circle()
-                                                    .fill(AppTheme.standard.color(for: suggestion.1).opacity(0.15))
-                                                    .frame(width: 32, height: 32)
-                                                                                                    
-                                                Image(systemName: iconForCategory(suggestion.1))
-                                                    .font(.caption.bold())
-                                                    .foregroundStyle(AppTheme.standard.color(for: suggestion.1))
-                                            }
-                                            
-                                            // Navn
-                                            Text(suggestion.0)
-                                                .font(.body)
-                                                .foregroundStyle(.primary)
-                                            
-                                            Spacer()
-                                            
-                                            // Kategori-tekst
-                                            Text(suggestion.1.rawValue)
-                                                .font(.caption2.bold())
-                                                .foregroundStyle(.secondary)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color(.tertiarySystemFill))
-                                                .clipShape(Capsule())
-                                        }
-                                        .padding(.vertical, 10)
-                                        .padding(.horizontal, 16)
-                                        .contentShape(Rectangle())
-                                    }
-                                    
-                                    if suggestion.0 != exerciseSuggestions.last?.0 {
-                                        Divider().padding(.leading, 60) // Indented divider
-                                    }
-                                }
+                                ForEach(exerciseSuggestions, id: \.name) { suggestion in
+                                                                    Button(action: {
+                                                                        withAnimation(.snappy) {
+                                                                            name = suggestion.name
+                                                                            selectedCategory = suggestion.category
+                                                                            
+                                                                            // Kopierer innstillingene fra ExerciseTemplate direkte til skjemaet!
+                                                                            showReps = suggestion.showReps
+                                                                            showWeight = suggestion.showWeight
+                                                                            showTime = suggestion.showTime
+                                                                            showDistance = suggestion.showDistance
+                                                                            showHeartRate = suggestion.showHeartRate
+                                                                            
+                                                                            applySmartDefaults()
+                                                                            updateSegment()
+                                                                            isNameFocused = false
+                                                                            activeField = nil
+                                                                        }
+                                                                    }) {
+                                                                        HStack(spacing: 12) {
+                                                                            ZStack {
+                                                                                Circle()
+                                                                                    .fill(AppTheme.standard.color(for: suggestion.category).opacity(0.15))
+                                                                                    .frame(width: 32, height: 32)
+                                                                                                                                    
+                                                                                Image(systemName: iconForCategory(suggestion.category))
+                                                                                    .font(.caption.bold())
+                                                                                    .foregroundStyle(AppTheme.standard.color(for: suggestion.category))
+                                                                            }
+                                                                            
+                                                                            Text(suggestion.name)
+                                                                                .font(.body)
+                                                                                .foregroundStyle(.primary)
+                                                                            
+                                                                            Spacer()
+                                                                            
+                                                                            Text(suggestion.category.rawValue)
+                                                                                .font(.caption2.bold())
+                                                                                .foregroundStyle(.secondary)
+                                                                                .padding(.horizontal, 8)
+                                                                                .padding(.vertical, 4)
+                                                                                .background(Color(.tertiarySystemFill))
+                                                                                .clipShape(Capsule())
+                                                                        }
+                                                                        .padding(.vertical, 10)
+                                                                        .padding(.horizontal, 16)
+                                                                        .contentShape(Rectangle())
+                                                                    }
+                                                                    
+                                                                    if suggestion.name != exerciseSuggestions.last?.name {
+                                                                        Divider().padding(.leading, 60)
+                                                                    }
+                                                                }
                             }
                             .padding(.vertical, 8)
                         }
@@ -288,66 +326,83 @@ struct AddSegmentView: View {
     }
     
     var inputGridSection: some View {
-        HStack(spacing: 12) {
-            if showReps {
-                CompactInputCell(
-                    value: "\(targetReps)",
-                    label: "Reps",
-                    isActive: activeField == .reps,
-                    action: {
-                        activeField = .reps; onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
-                )
-            }
-            
-            if showWeight {
-                CompactInputCell(
-                    value: weight == 0 ? "-" : String(format: "%.0f", weight),
-                    label: "kg",
-                    isActive: activeField == .weight,
-                    action: {
-                        activeField = .weight
-                        let weightBinding = Binding<Int>(
-                            get: { Int(weight) },
-                            set: { weight = Double($0) }
-                        )
-                        onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+            VStack(alignment: .trailing, spacing: 8) {
+                // Tilpass felt-knapp (vises kun i redigering)
+                if routine != nil || log != nil {
+                    Button(action: { showingFieldMenu.toggle() }) {
+                        HStack {
+                            Image(systemName: "slider.horizontal.3")
+                            Text("Tilpass felt")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(.systemGray6))
+                        .clipShape(Capsule())
                     }
-                )
-            }
-            
-            if showTime {
-                CompactInputCell(
-                    // Viser desimaler visuelt, f.eks "45.23"
-                    value: duration >= 60 ? String(format: "%d:%02.0f", Int(duration) / 60, duration.truncatingRemainder(dividingBy: 60)) : String(format: "%.2f", duration),
-                    label: "Tid",
-                    isActive: activeField == .time,
-                    action: {
-                        activeField = .time
-                        // Oversetter Double til Int for at linjal-visningen skal fungere uendret
-                        let timeBinding = Binding<Int>(
-                            get: { Int(duration) },
-                            set: { duration = Double($0) }
+                }
+                
+                // Din eksisterende HStack for feltene
+                HStack(spacing: 12) {
+                    if showReps {
+                        CompactInputCell(
+                            value: "\(targetReps)",
+                            label: "Reps",
+                            isActive: activeField == .reps,
+                            action: {
+                                activeField = .reps; onRequestPicker("Antall reps", $targetReps, 1...100, 1) }
                         )
-                        onRequestPicker("Tid", timeBinding, 0...3600, 5)
                     }
-                )
-            }
-            if showDistance {
-                CompactInputCell(
-                    value: distance == 0 ? "-" : String(format: "%.0f", distance),
-                    label: "Meter",
-                    isActive: activeField == .distance,
-                    action: { activeField = .distance
-                        let distBinding = Binding<Int>(
-                            get: { Int(distance) },
-                            set: { distance = Double($0) }
+                    
+                    if showWeight {
+                        CompactInputCell(
+                            value: weight == 0 ? "-" : String(format: "%.0f", weight),
+                            label: "kg",
+                            isActive: activeField == .weight,
+                            action: {
+                                activeField = .weight
+                                let weightBinding = Binding<Int>(
+                                    get: { Int(weight) },
+                                    set: { weight = Double($0) }
+                                )
+                                onRequestPicker("Vekt (kg)", weightBinding, 0...300, 1)
+                            }
                         )
-                        onRequestPicker("Meter", distBinding, 0...10000, 50)
                     }
-                )
+                    
+                    if showTime {
+                        LiveTimeInputCell(
+                            duration: $duration,
+                            segment: segmentToEdit,
+                            isActive: activeField == .time,
+                            action: {
+                                activeField = .time
+                                let timeBinding = Binding<Int>(
+                                    get: { Int(duration) },
+                                    set: { duration = Double($0) }
+                                )
+                                onRequestPicker("Tid", timeBinding, 0...3600, 5)
+                            }
+                        )
+                    }
+                    if showDistance {
+                        CompactInputCell(
+                            value: distance == 0 ? "-" : String(format: "%.0f", distance),
+                            label: "Meter",
+                            isActive: activeField == .distance,
+                            action: { activeField = .distance
+                                let distBinding = Binding<Int>(
+                                    get: { Int(distance) },
+                                    set: { distance = Double($0) }
+                                )
+                                onRequestPicker("Meter", distBinding, 0...10000, 50)
+                            }
+                        )
+                    }
+                }
             }
         }
-    }
     
     var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -389,69 +444,88 @@ struct AddSegmentView: View {
         }
     }
     
+    
     // --- LOGIC ---
     
     var canGoBack: Bool { previousSegment != nil || previousLogEntry != nil }
     var canGoForward: Bool { nextSegment != nil || nextLogEntry != nil }
     
-    var showReps: Bool { selectedCategory == .strength || selectedCategory == .combined }
-    var showWeight: Bool { selectedCategory == .strength || selectedCategory == .combined }
-    var showTime: Bool { selectedCategory == .cardio || selectedCategory == .other || selectedCategory == .combined }
-    var showDistance: Bool { selectedCategory == .cardio || selectedCategory == .combined }
-    
-    var exerciseSuggestions: [(String, ExerciseCategory)] {
-        // 1. Samle alle navn fra tidligere rutiner
-        let historyNames = allRoutines.flatMap { $0.segments }.map { ($0.name, $0.category) }
-        
-        // 2. Slå sammen med standardlisten
-        let allSource = standardExercises + historyNames
-        
-        // 3. Fjern duplikater (vi bruker navn som nøkkel)
-        var unique = [String: ExerciseCategory]()
-        for item in allSource {
-            if unique[item.0] == nil {
-                unique[item.0] = item.1
+    var exerciseSuggestions: [ExerciseTemplate] {
+            // 1. Samle alle navn og maler fra tidligere rutiner
+            let historyNames = allRoutines.flatMap { $0.segments }.map { segment in
+                ExerciseTemplate(
+                    name: segment.name,
+                    category: segment.category,
+                    showReps: segment.showReps,
+                    showWeight: segment.showWeight,
+                    showTime: segment.showTime,
+                    showDistance: segment.showDistance,
+                    showHeartRate: segment.showHeartRate
+                )
+            }
+            
+            // 2. Slå sammen med standardlisten
+            let allSource = standardExercises + historyNames
+            
+            // 3. Fjern duplikater (vi bruker navn som nøkkel og beholder den første vi finner)
+            var unique = [String: ExerciseTemplate]()
+            for item in allSource {
+                if unique[item.name] == nil {
+                    unique[item.name] = item
+                }
+            }
+            
+            let allUnique = Array(unique.values)
+            
+            // 4. Filtrer basert på tekst input
+            if name.isEmpty {
+                return Array(allUnique.sorted { $0.name < $1.name }.prefix(20))
+            } else {
+                return allUnique
+                    .filter { $0.name.localizedCaseInsensitiveContains(name) }
+                    .sorted { $0.name < $1.name }
             }
         }
-        
-        let allUnique = unique.map { key, value in (key, value) }
-        
-        // 4. Filtrer basert på tekst input
-        if name.isEmpty {
-            // Hvis tomt felt: Vis alfabetisk liste (begrens antall for ytelse)
-            return allUnique.sorted { $0.0 < $1.0 }.prefix(20).map { $0 }
-        } else {
-            // Hvis bruker skriver: Vis treff som inneholder teksten
-            return allUnique
-                .filter { $0.0.localizedCaseInsensitiveContains(name) }
-                .sorted { $0.0 < $1.0 }
-        }
-    }
     
     func loadData() {
-        if let segment = segmentToEdit {
-            name = segment.name
-            selectedCategory = segment.category
-            note = segment.note
-            duration = segment.durationSeconds
-            targetReps = segment.targetReps
-            weight = segment.weight
-            distance = segment.distance
-            
-            updateActiveFieldFromParent()
-            
-        } else if let logEntry = logEntryToEdit {
-            name = logEntry.name
-            selectedCategory = logEntry.category
-            note = logEntry.note
-            duration = logEntry.durationSeconds
-            targetReps = logEntry.targetReps
-            weight = logEntry.weight
-            distance = logEntry.distance
-            
-            updateActiveFieldFromParent()
+            if let segment = segmentToEdit {
+                name = segment.name
+                selectedCategory = segment.category
+                note = segment.note
+                duration = segment.durationSeconds
+                targetReps = segment.targetReps
+                weight = segment.weight
+                distance = segment.distance
+                heartRate = segment.heartRate // Ny
+                
+                showReps = segment.showReps
+                showWeight = segment.showWeight
+                showTime = segment.showTime
+                showDistance = segment.showDistance
+                showHeartRate = segment.showHeartRate
+                
+                updateActiveFieldFromParent()
+                
+            } else if let logEntry = logEntryToEdit {
+                name = logEntry.name
+                selectedCategory = logEntry.category
+                note = logEntry.note
+                duration = logEntry.durationSeconds
+                targetReps = logEntry.targetReps
+                weight = logEntry.weight
+                distance = logEntry.distance
+                heartRate = logEntry.heartRate // Ny
+                
+                // For eksisterende logg kan vi sette visning basert på hva som har verdier:
+                showReps = logEntry.targetReps > 0
+                showWeight = logEntry.weight > 0
+                showTime = logEntry.durationSeconds > 0
+                showDistance = logEntry.distance > 0
+                showHeartRate = logEntry.heartRate > 0
+                
+                updateActiveFieldFromParent()
+            }
         }
-    }
     
     func updateActiveFieldFromParent() {
         if let field = currentActiveField {
@@ -512,39 +586,52 @@ struct AddSegmentView: View {
     }
     
     func updateSegment() {
-        if let segment = segmentToEdit {
-            if segment.name != name { segment.name = name }
-            if segment.category != selectedCategory { segment.category = selectedCategory }
-            if segment.note != note { segment.note = note }
-            if segment.durationSeconds != duration { segment.durationSeconds = duration }
-            if segment.targetReps != targetReps { segment.targetReps = targetReps }
-            if segment.weight != weight { segment.weight = weight }
-            if segment.distance != distance { segment.distance = distance }
-        } else if let logEntry = logEntryToEdit {
-            if logEntry.originalReps == nil && logEntry.targetReps != targetReps {
-                logEntry.originalReps = logEntry.targetReps
+            if let segment = segmentToEdit {
+                if segment.name != name { segment.name = name }
+                if segment.category != selectedCategory { segment.category = selectedCategory }
+                if segment.note != note { segment.note = note }
+                if segment.durationSeconds != duration { segment.durationSeconds = duration }
+                if segment.targetReps != targetReps { segment.targetReps = targetReps }
+                if segment.weight != weight { segment.weight = weight }
+                if segment.distance != distance { segment.distance = distance }
+                if segment.heartRate != heartRate { segment.heartRate = heartRate } // Ny
+                
+                // Lagrer valgene for visning permanent i denne spesifikke øvelsen
+                segment.showReps = showReps
+                segment.showWeight = showWeight
+                segment.showTime = showTime
+                segment.showDistance = showDistance
+                segment.showHeartRate = showHeartRate
+                
+            } else if let logEntry = logEntryToEdit {
+                if logEntry.originalReps == nil && logEntry.targetReps != targetReps {
+                    logEntry.originalReps = logEntry.targetReps
+                }
+                if logEntry.originalWeight == nil && logEntry.weight != weight {
+                    logEntry.originalWeight = logEntry.weight
+                }
+                if logEntry.originalDuration == nil && logEntry.durationSeconds != duration {
+                    logEntry.originalDuration = logEntry.durationSeconds
+                }
+                if logEntry.originalDistance == nil && logEntry.distance != distance {
+                    logEntry.originalDistance = logEntry.distance
+                }
+                if logEntry.originalHeartRate == nil && logEntry.heartRate != heartRate { // Ny
+                    logEntry.originalHeartRate = logEntry.heartRate
+                }
+                
+                logEntry.name = name
+                logEntry.categoryRawValue = selectedCategory.rawValue
+                logEntry.note = note
+                logEntry.durationSeconds = duration
+                logEntry.targetReps = targetReps
+                logEntry.weight = weight
+                logEntry.distance = distance
+                logEntry.heartRate = heartRate // Ny
+                
+                log?.wasEdited = true
             }
-            if logEntry.originalWeight == nil && logEntry.weight != weight {
-                logEntry.originalWeight = logEntry.weight
-            }
-            if logEntry.originalDuration == nil && logEntry.durationSeconds != duration {
-                logEntry.originalDuration = logEntry.durationSeconds
-            }
-            if logEntry.originalDistance == nil && logEntry.distance != distance {
-                logEntry.originalDistance = logEntry.distance
-            }
-            
-            logEntry.name = name
-            logEntry.categoryRawValue = selectedCategory.rawValue
-            logEntry.note = note
-            logEntry.durationSeconds = duration
-            logEntry.targetReps = targetReps
-            logEntry.weight = weight
-            logEntry.distance = distance
-            
-            log?.wasEdited = true
         }
-    }
     
     func deleteSegment() {
         if let segment = segmentToEdit, let routine = routine {

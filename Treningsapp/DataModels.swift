@@ -36,27 +36,40 @@ final class CircuitRoutine {
 final class CircuitExercise {
     var name: String
     
-    // Verdier
+    // -- Verdi-felt --
     var durationSeconds: Double
     var targetReps: Int
     var weight: Double
     var distance: Double
+    var heartRate: Int = 0// NY: Puls
+    
+    // -- Visnings-felt (styrer hva som vises i UI) --
+    var showReps: Bool = false
+    var showWeight: Bool = false
+    var showTime: Bool = false
+    var showDistance: Bool = false
+    var showHeartRate: Bool = false // NY: Vis puls-felt
     
     var categoryRawValue: String
     var note: String
-    var sortIndex: Int = 0 // Holder orden på rekkefølgen innad i økten
+    var sortIndex: Int = 0
     
-    // Hjelpevariabel for enum
     var category: ExerciseCategory {
         get { ExerciseCategory(rawValue: categoryRawValue) ?? .strength }
         set { categoryRawValue = newValue.rawValue }
     }
     
     init(name: String,
-         durationSeconds: Double = 45.0,
-         targetReps: Int = 10,
+         durationSeconds: Double = 0.0,
+         targetReps: Int = 0,
          weight: Double = 0.0,
          distance: Double = 0.0,
+         heartRate: Int = 0,
+         showReps: Bool = false,
+         showWeight: Bool = false,
+         showTime: Bool = false,
+         showDistance: Bool = false,
+         showHeartRate: Bool = false,
          category: ExerciseCategory = .strength,
          note: String = "",
          sortIndex: Int = 0) {
@@ -66,6 +79,14 @@ final class CircuitExercise {
         self.targetReps = targetReps
         self.weight = weight
         self.distance = distance
+        self.heartRate = heartRate
+        
+        self.showReps = showReps
+        self.showWeight = showWeight
+        self.showTime = showTime
+        self.showDistance = showDistance
+        self.showHeartRate = showHeartRate
+        
         self.categoryRawValue = category.rawValue
         self.note = note
         self.sortIndex = sortIndex
@@ -105,9 +126,9 @@ final class LoggedExercise {
     var targetReps: Int
     var weight: Double
     var distance: Double
+    var heartRate: Int = 0 // NY
     var note: String
     
-    // Nytt felt for sortering
     var sortIndex: Int = 0
     
     // Originale verdier (hvis endret i ettertid)
@@ -115,23 +136,25 @@ final class LoggedExercise {
     var originalReps: Int?
     var originalWeight: Double?
     var originalDistance: Double?
+    var originalHeartRate: Int? // NY
     
     // Sjekker om øvelsen er redigert
     var hasChanges: Bool {
-        originalDuration != nil || originalReps != nil || originalWeight != nil || originalDistance != nil
+        originalDuration != nil || originalReps != nil || originalWeight != nil || originalDistance != nil || originalHeartRate != nil
     }
     
     var category: ExerciseCategory {
         ExerciseCategory(rawValue: categoryRawValue) ?? .strength
     }
     
-    init(name: String, categoryRawValue: String, duration: Double, reps: Int, weight: Double, distance: Double, note: String, sortIndex: Int = 0) {
+    init(name: String, categoryRawValue: String, duration: Double, reps: Int, weight: Double, distance: Double, heartRate: Int = 0, note: String, sortIndex: Int = 0) {
         self.name = name
         self.categoryRawValue = categoryRawValue
         self.durationSeconds = duration
         self.targetReps = reps
         self.weight = weight
         self.distance = distance
+        self.heartRate = heartRate
         self.note = note
         self.sortIndex = sortIndex
     }

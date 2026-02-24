@@ -9,7 +9,7 @@ struct CircuitDetailView: View {
     
     // --- STOPPEKLOKKE MANAGER ---
     // Holder styr på aktiv timer på tvers av views
-    @StateObject private var stopwatchManager = StopwatchManager()
+    @StateObject var stopwatchManager = StopwatchManager.shared
     
     // UI States
     @State private var draggingSegment: CircuitExercise?
@@ -21,6 +21,12 @@ struct CircuitDetailView: View {
     @State private var showLogConfirmation = false
     @State private var showIncompleteAlert = false
     @State private var originalName: String = ""
+    
+    // Globale valg for hvilke felt som er synlige
+        @AppStorage("showTimeField") private var showTime: Bool = true
+        @AppStorage("showDistanceField") private var showDistance: Bool = true
+        @AppStorage("showRepsField") private var showReps: Bool = true
+        @AppStorage("showWeightField") private var showWeight: Bool = true
     
     // LOGIKK FOR ØKT-STATUS
     @State private var sessionStartTime: Date? = nil
@@ -216,39 +222,47 @@ struct CircuitDetailView: View {
     }
     
     func performLogging() {
-        stopwatchManager.stop()
-        let startTime = sessionStartTime ?? Date()
-        let elapsedSeconds = Int(Date().timeIntervalSince(startTime))
-        
-        let log = WorkoutLog(routineName: routine.name, date: Date(), totalDuration: elapsedSeconds)
-        
-        for (index, segment) in uiSegments.enumerated() {
-            let loggedExercise = LoggedExercise(
-                name: segment.name,
-                categoryRawValue: segment.category.rawValue,
-                duration: segment.durationSeconds,
-                reps: segment.targetReps,
-                weight: segment.weight,
-                distance: segment.distance,
-                note: segment.note,
-                sortIndex: index
-            )
-            log.exercises.append(loggedExercise)
+            stopwatchManager.stop()
+            let startTime = sessionStartTime ?? Date()
+            let elapsedSeconds = Int(Date().timeIntervalSince(startTime))
+            
+            let log = WorkoutLog(routineName: routine.name, date: Date(), totalDuration: elapsedSeconds)
+            
+            for (index, segment) in uiSegments.enumerated() {
+                
+                // --- NY SJEKK: Nullstill verdier for skjulte felt ---
+                let finalDuration = showTime ? segment.durationSeconds : 0
+                let finalDistance = showDistance ? segment.distance : 0
+                let finalReps = showReps ? segment.targetReps : 0
+                let finalWeight = showWeight ? segment.weight : 0.0
+                
+                // Lagre øvelsen med de rensede verdiene
+                let loggedExercise = LoggedExercise(
+                    name: segment.name,
+                    categoryRawValue: segment.category.rawValue,
+                    duration: finalDuration,
+                    reps: finalReps,
+                    weight: finalWeight,
+                    distance: finalDistance,
+                    note: segment.note,
+                    sortIndex: index
+                )
+                log.exercises.append(loggedExercise)
+            }
+            
+            modelContext.insert(log)
+            
+            for segment in routine.segments {
+                segment.durationSeconds = 0
+            }
+            
+            isSessionStarted = false
+            sessionStartTime = nil
+            completedSegmentIds.removeAll()
+            try? modelContext.save()
+            
+            showLogConfirmation = true
         }
-        
-        modelContext.insert(log)
-        
-        for segment in routine.segments {
-            segment.durationSeconds = 0
-        }
-        
-        isSessionStarted = false
-        sessionStartTime = nil
-        completedSegmentIds.removeAll()
-        try? modelContext.save()
-        
-        showLogConfirmation = true
-    }
     
     func addSegment() {
         let lastSegment = routine.segments.sorted { $0.sortIndex < $1.sortIndex }.last

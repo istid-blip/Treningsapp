@@ -139,20 +139,28 @@ struct ExerciseLibraryView: View {
     @State private var showingEditSheet = false
     
     // Henter ut unike øvelser fra alle rutiner
-    var uniqueExercises: [(name: String, category: ExerciseCategory, count: Int)] {
-        var exercises: [String: (ExerciseCategory, Int)] = [:]
-        
-        for routine in routines {
-            for segment in routine.segments {
-                let currentCount = exercises[segment.name]?.1 ?? 0
-                exercises[segment.name] = (segment.category, currentCount + 1)
+    // Henter ut alle standardøvelser OG unike øvelser fra alle rutiner
+        var uniqueExercises: [(name: String, category: ExerciseCategory, count: Int)] {
+            var exercises: [String: (ExerciseCategory, Int)] = [:]
+            
+            // 1. Legg først inn alle standardøvelser i ordboken (med 0 forekomster)
+            for template in standardExercises {
+                exercises[template.name] = (template.category, 0)
             }
+            
+            // 2. Gå gjennom brukerens rutiner og oppdater tellingen / legg til nye
+            for routine in routines {
+                for segment in routine.segments {
+                    let currentCount = exercises[segment.name]?.1 ?? 0
+                    exercises[segment.name] = (segment.category, currentCount + 1)
+                }
+            }
+            
+            // 3. Konverter til en sortert liste
+            return exercises.map { key, value in
+                (name: key, category: value.0, count: value.1)
+            }.sorted { $0.name < $1.name }
         }
-        
-        return exercises.map { key, value in
-            (name: key, category: value.0, count: value.1)
-        }.sorted { $0.name < $1.name }
-    }
     
     var body: some View {
         List {

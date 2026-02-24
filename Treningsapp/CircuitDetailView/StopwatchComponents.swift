@@ -10,6 +10,7 @@ import UIKit
 
 // MARK: - Stopwatch Manager
 class StopwatchManager: ObservableObject {
+    static let shared = StopwatchManager()
     @Published var activeSegmentID: PersistentIdentifier? = nil
     
     private var startTimestamp: Double = 0.0
@@ -61,6 +62,7 @@ class StopwatchManager: ObservableObject {
 }
 
 // MARK: - Stopwatch View
+// MARK: - Stopwatch View
 struct StopwatchView: View {
     @Binding var bindingTime: Int
     var allowResuming: Bool = true
@@ -74,37 +76,55 @@ struct StopwatchView: View {
     @State private var localStartTimestamp: Double = 0.0
     @State private var localAccumulatedTime: Double = 0.0
     
-    // Oppdaterer visningen raskt for smooth hundredels-animasjon
+    // Timer for rask oppdatering av UI
     let timer = Timer.publish(every: 0.03, on: .main, in: .common).autoconnect()
     
     var body: some View {
         VStack {
             Button(action: toggleStopwatch) {
                 ZStack {
+                    // Bakgrunnssirkel med glød
                     Circle()
                         .fill(isRunning ? Color.orange : Color.green)
-                        .shadow(color: (isRunning ? Color.orange : Color.green).opacity(0.4), radius: 15, x: 0, y: 5)
+                        // Litt kraftigere skygge når den er aktiv for mer "pop"
+                        .shadow(color: (isRunning ? Color.orange : Color.green).opacity(isRunning ? 0.6 : 0.4), radius: isRunning ? 20 : 15, x: 0, y: 5)
                     
+                    // Animerende "puls" ring når den kjører
                     if isRunning {
                         Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                            .scaleEffect(1.1)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 3)
+                            .scaleEffect(1.15)
                             .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: isRunning)
                     }
                     
-                    VStack(spacing: 5) {
-                        Text(formatDetailedTime(elapsedTime))
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .monospacedDigit()
-                            // Fjerner contentTransition for desimaler, da standard numericText glitchet litt
+                    // INNHOLDET I SIRKELEN
+                    VStack(spacing: 4) {
+                        // Vi splitter tiden i to deler for bedre layout
+                        let timeParts = splitTime(elapsedTime)
                         
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            // Hovedtid (MM:SS) - Stor og tydelig
+                            Text(timeParts.main)
+                                .font(.system(size: 42, weight: .black, design: .rounded))
+                                .monospacedDigit() // Hindrer tallene i å hoppe
+                            
+                            // Hundredeler (.hh) - Mindre og litt dusere
+                            Text(timeParts.hundredths)
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.8))
+                        }
+                        .foregroundStyle(.white)
+                        .offset(y: 4) // Justerer litt ned for optisk balanse
+                        
+                        // Ikon for Play/Pause
                         Image(systemName: isRunning ? "pause.fill" : "play.fill")
-                            .font(.title2)
+                            .font(.title3.bold())
                             .foregroundStyle(.white.opacity(0.9))
                     }
                 }
-                .frame(width: 190, height: 190)
+                // Har økt størrelsen litt fra 190 til 200 for bedre plass
+                .frame(width: 200, height: 200)
             }
             .buttonStyle(ScaleButtonStyle())
         }
@@ -154,8 +174,6 @@ struct StopwatchView: View {
             mgr.toggle(seg)
             isRunning = mgr.isRunning(seg)
             if !isRunning {
-                // Returnerer nærmeste heltall til rulle-linjalen, men den ekte
-                // desimaltiden er trygt lagret i segment.durationSeconds via manageren.
                 bindingTime = Int(seg.durationSeconds)
                 elapsedTime = seg.durationSeconds
             }
@@ -172,11 +190,14 @@ struct StopwatchView: View {
         }
     }
     
-    func formatDetailedTime(_ totalSeconds: Double) -> String {
-        let minutes = Int(totalSeconds) / 60
-        let seconds = Int(totalSeconds) % 60
-        let hundredths = Int((totalSeconds.truncatingRemainder(dividingBy: 1)) * 100)
-        
-        return String(format: "%02d:%02d.%02d", minutes, seconds, hundredths)
-    }
+}
+func splitTime(_ totalSeconds: Double) -> (main: String, hundredths: String) {
+    let minutes = Int(totalSeconds) / 60
+    let seconds = Int(totalSeconds) % 60
+    let hundredths = Int((totalSeconds.truncatingRemainder(dividingBy: 1)) * 100)
+    
+    let mainStr = String(format: "%02d:%02d", minutes, seconds)
+    let hundStr = String(format: ".%02d", hundredths)
+    
+    return (mainStr, hundStr)
 }

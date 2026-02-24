@@ -30,6 +30,14 @@ struct ExportSegment: Codable {
     let categoryRawValue: String
     let note: String
     let sortIndex: Int
+    
+    // Nye felt gjort valgfrie for å støtte gamle backups
+    var heartRate: Int?
+    var showReps: Bool?
+    var showWeight: Bool?
+    var showTime: Bool?
+    var showDistance: Bool?
+    var showHeartRate: Bool?
 }
 
 // Strukturer for Loggene (WorkoutLog)
@@ -48,6 +56,7 @@ struct ExportExercise: Codable {
     let weight: Double
     let distance: Double
     let note: String
+    var heartRate: Int?
 }
 
 struct DataExportManager {
@@ -60,7 +69,7 @@ struct DataExportManager {
                 createdDate: r.createdDate,
                 sortIndex: r.sortIndex,
                 segments: r.segments.map { s in
-                    ExportSegment(name: s.name, durationSeconds: s.durationSeconds, targetReps: s.targetReps, weight: s.weight, distance: s.distance, categoryRawValue: s.categoryRawValue, note: s.note, sortIndex: s.sortIndex)
+                    ExportSegment(name: s.name, durationSeconds: s.durationSeconds, targetReps: s.targetReps, weight: s.weight, distance: s.distance, categoryRawValue: s.categoryRawValue, note: s.note, sortIndex: s.sortIndex, heartRate: s.heartRate, showReps: s.showReps, showWeight: s.showWeight, showTime: s.showTime, showDistance: s.showDistance, showHeartRate: s.showHeartRate)
                 }
             )
         }
@@ -71,7 +80,7 @@ struct DataExportManager {
                 date: log.date,
                 totalDuration: log.totalDuration,
                 exercises: log.exercises.map { ex in
-                    ExportExercise(name: ex.name, category: ex.categoryRawValue, duration: ex.durationSeconds, reps: ex.targetReps, weight: ex.weight, distance: ex.distance, note: ex.note)
+                    ExportExercise(name: ex.name, category: ex.categoryRawValue, duration: ex.durationSeconds, reps: ex.targetReps, weight: ex.weight, distance: ex.distance, note: ex.note, heartRate: ex.heartRate)
                 }
             )
         }
@@ -111,7 +120,7 @@ struct DataExportManager {
             nyRoutine.sortIndex = r.sortIndex
             
             for s in r.segments {
-                let nySegment = CircuitExercise(name: s.name, durationSeconds: s.durationSeconds, targetReps: s.targetReps, weight: s.weight, distance: s.distance, category: ExerciseCategory(rawValue: s.categoryRawValue) ?? .strength, note: s.note, sortIndex: s.sortIndex)
+                let nySegment = CircuitExercise(name: s.name, durationSeconds: s.durationSeconds, targetReps: s.targetReps, weight: s.weight, distance: s.distance, heartRate: s.heartRate ?? 0, showReps: s.showReps ?? false, showWeight: s.showWeight ?? false, showTime: s.showTime ?? false, showDistance: s.showDistance ?? false, showHeartRate: s.showHeartRate ?? false, category: ExerciseCategory(rawValue: s.categoryRawValue) ?? .strength, note: s.note, sortIndex: s.sortIndex)
                 nyRoutine.segments.append(nySegment)
             }
             context.insert(nyRoutine)
@@ -122,7 +131,7 @@ struct DataExportManager {
             let nyLog = WorkoutLog(routineName: l.routineName, date: l.date, totalDuration: l.totalDuration)
             
             for ex in l.exercises {
-                let nyExercise = LoggedExercise(name: ex.name, categoryRawValue: ex.category, duration: ex.duration, reps: ex.reps, weight: ex.weight, distance: ex.distance, note: ex.note)
+                let nyExercise = LoggedExercise(name: ex.name, categoryRawValue: ex.category, duration: ex.duration, reps: ex.reps, weight: ex.weight, distance: ex.distance, heartRate: ex.heartRate ?? 0, note: ex.note, sortIndex: 0)
                 nyLog.exercises.append(nyExercise)
             }
             context.insert(nyLog)
